@@ -7,12 +7,8 @@ import "./interfaces/uniswapinterface.sol";
 import "./interfaces/proxyinterface.sol";
 
 contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
-    bytes32 public constant DONATION_WITHDRAW_ROLE =
-        keccak256("DONATION_WITHDRAW_ROLE");
     bytes32 public constant MARKETING_WITHDRAW_ROLE =
         keccak256("MARKETING_WITHDRAW_ROLE");
-    bytes32 public constant OTHER_WITHDRAW_ROLE =
-        keccak256("OTHER_WITHDRAW_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
 
     bytes32 public constant WHALE_ROLE = keccak256("WHALE_ROLE");
@@ -28,16 +24,10 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     uint256 public min_sell_pmille = 1;
 
     uint256 public _liquidityFee = 5;
-    uint256 public _donationFee = 2;
     uint256 public _marketingFee = 1;
-    uint256 public _otherFee = 0;
     uint256 public _feeTotal =
-        _liquidityFee + _donationFee + _marketingFee + _otherFee;
+        _liquidityFee + _marketingFee;
 
-    uint256 public assessed_balance = 0;
-    uint256 public assessed_donation_balance = 0;
-    uint256 public assessed_marketing_balance = 0;
-    uint256 public assessed_other_balance = 0;
     //Anti whale
     uint256 private _time_limit = 1 hours;
     uint256 private _max_sell_amount;
@@ -60,9 +50,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         address uniswap_pair
     ) {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _setupRole(DONATION_WITHDRAW_ROLE, _msgSender());
         _setupRole(MARKETING_WITHDRAW_ROLE, _msgSender());
-        _setupRole(OTHER_WITHDRAW_ROLE, _msgSender());
         _setupRole(WHALE_ROLE, _msgSender());
         _setupRole(FEE_ROLE, _msgSender());
         _setupRole(TOKEN_ROLE, token_address);
@@ -214,214 +202,31 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         max_sell_pmille = max_pmille;
     }
 
-    //Withdraw functions
-    //First update fee balances and check if enough BNB is in wallet to withdraw.
-    //Remove payed out amount from specific wallet
-    function withdrawDonation(address payable receiver, uint256 amount)
-        public
-        onlyRole(DONATION_WITHDRAW_ROLE)
-    {
-        require(amount > 0, "You need to send more than 0!");
-        updateFeeBalances();
-        require(
-            assessed_donation_balance >= amount,
-                "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(amount);
-        assessed_donation_balance = assessed_donation_balance - amount;
-        assessed_balance = assessed_balance - amount;
-    }
-
     function withdrawMarketing(address payable receiver, uint256 amount)
         public
         onlyRole(MARKETING_WITHDRAW_ROLE)
     {
         require(amount > 0, "You need to send more than 0!");
-        updateFeeBalances();
-        require(
-            assessed_marketing_balance >= amount,
-                "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(amount);
-        assessed_marketing_balance = assessed_marketing_balance - amount;
-        assessed_balance = assessed_balance - amount;
-    }
-
-    function withdrawOther(address payable receiver, uint256 amount)
-        public
-        onlyRole(OTHER_WITHDRAW_ROLE)
-    {
-        require(amount > 0, "You need to send more than 0!");
-        updateFeeBalances();
-        require(
-            assessed_other_balance >= amount,
-                "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(amount);
-        assessed_other_balance = assessed_other_balance - amount;
-        assessed_balance = assessed_balance - amount;
-    }
-
-    function withdrawDonationAll(address payable receiver)
-        public
-        onlyRole(DONATION_WITHDRAW_ROLE)
-    {
-        updateFeeBalances();
-        require(
-            assessed_donation_balance > 0,
-            "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(assessed_donation_balance);
-        assessed_balance = assessed_balance - assessed_donation_balance;
-        assessed_donation_balance = 0;
+        require(amount <= address(this).balance, 'The contract balance is too low');
+        (bool success, ) = receiver.call{value:amount}("");
+        require(success, 'Error sending BNB to sender');
     }
 
     function withdrawMarketingAll(address payable receiver)
         public
         onlyRole(MARKETING_WITHDRAW_ROLE)
     {
-        updateFeeBalances();
-        require(
-            assessed_marketing_balance > 0,
-            "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(assessed_marketing_balance);
-        assessed_balance = assessed_balance - assessed_marketing_balance;
-        assessed_marketing_balance = 0;
-    }
-
-    function withdrawOtherAll(address payable receiver)
-        public
-        onlyRole(OTHER_WITHDRAW_ROLE)
-    {
-        updateFeeBalances();
-        require(
-            assessed_other_balance > 0,
-            "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(assessed_other_balance);
-        assessed_balance = assessed_balance - assessed_other_balance;
-        assessed_other_balance = 0;
-    }
-
-    //Show balances of contract without writing to contract
-
-    function showMarketingBalance() public view returns (uint256) {
-        uint256 balance;
-        (, balance, , ) = getBalances();
-        return balance;
-    }
-
-    function showDonationBalance() public view returns (uint256) {
-        uint256 balance;
-        (balance, , , ) = getBalances();
-        return balance;
-    }
-
-    function showOtherBalance() public view returns (uint256) {
-        uint256 balance;
-        (, , balance, ) = getBalances();
-        return balance;
+        (bool success, ) = receiver.call{value:address(this).balance}("");
+        require(success, 'Error sending BNB to sender');
     }
 
     //Update fees for contract
     function updateFees(
-        uint256 donation,
         uint256 marketing,
-        uint256 liquidity,
-        uint256 other
+        uint256 liquidity
     ) public onlyRole(FEE_ROLE) {
-        updateFeeBalances();
-        _donationFee = donation;
         _marketingFee = marketing;
         _liquidityFee = liquidity;
-        _otherFee = other;
-        _feeTotal = _donationFee + _marketingFee + _liquidityFee + _otherFee;
-    }
-
-    //Update balances for different fee accounts to keep track of how much there is left for which fee
-    //Write updated balances to contract
-    function updateFeeBalances() private {
-        uint256 _donation_balance;
-        uint256 _marketing_balance;
-        uint256 _other_balance;
-        uint256 _assessed_balance;
-        (
-            _donation_balance,
-            _marketing_balance,
-            _other_balance,
-            _assessed_balance
-        ) = getBalances();
-        assessed_donation_balance = _donation_balance;
-        assessed_marketing_balance = _marketing_balance;
-        assessed_other_balance = _other_balance;
-        assessed_balance = _assessed_balance;
-    }
-
-    function getBalances()
-        private
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        uint256 not_assessed = address(this).balance - assessed_balance;
-        uint256 _donation_balance;
-        uint256 _marketing_balance;
-        uint256 _other_balance;
-        uint256 _assessed_balance;
-        uint256 tmp_feeTotal = _donationFee + _marketingFee + _otherFee;
-        //Check if balances are already up to date and avoid rounding error
-        if (not_assessed >= tmp_feeTotal) {
-            //Calculate updated balances
-            //to avoid rounding errors
-            //Find added balances based on not assessed amount and fees
-            uint256 added_donation_balance =
-                (
-                    (_donationFee > 0)
-                        ? ((not_assessed * _donationFee) / tmp_feeTotal)
-                        : 0
-                );
-            uint256 added_marketing_balance =
-                (
-                    (_marketingFee > 0)
-                        ? ((not_assessed * _marketingFee) / tmp_feeTotal)
-                        : 0
-                );
-            uint256 added_other_balance =
-                (
-                    (_otherFee > 0)
-                        ? ((not_assessed * _otherFee) / tmp_feeTotal)
-                        : 0
-                );
-
-            _donation_balance = assessed_donation_balance + added_donation_balance;
-            _marketing_balance = assessed_marketing_balance + added_marketing_balance;
-            _other_balance = assessed_other_balance + added_other_balance;
-            _assessed_balance =
-                assessed_balance +
-                added_other_balance +
-                added_marketing_balance +
-                added_donation_balance;
-            return (
-                _donation_balance,
-                _marketing_balance,
-                _other_balance,
-                _assessed_balance
-            );
-        }
-        _donation_balance = assessed_donation_balance;
-        _marketing_balance = assessed_marketing_balance;
-        _other_balance = assessed_other_balance;
-        _assessed_balance = assessed_balance;
-        return (
-            _donation_balance,
-            _marketing_balance,
-            _other_balance,
-            _assessed_balance
-        );
+        _feeTotal = _marketingFee + _liquidityFee;
     }
 }
