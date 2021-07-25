@@ -20,7 +20,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
     //Create roles for the contract
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant TOCENOMICS_ROLE = keccak256("TOCENOMICS_ROLE");
-    bytes32 public constant NOLIMIT_ROLE = keccak256("NOLIMIT_ROLE");
+    bytes32 public constant JANITOR_ROLE = keccak256("JANITOR_ROLE");
     bytes32 public constant POOL_ROLE = keccak256("POOL_ROLE");
 
     //Mapping of token and reflection values
@@ -42,7 +42,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
     uint256 private _tFeeTotal;
 
     //Proxy and antiwhale disabled by default since the contract can first be added after token creation
-    bool public antiwhale = false;
+    bool public proxyfee = false;
     bool public proxyenabled = false;
 
     //Define initial contract settings
@@ -77,8 +77,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setupRole(PAUSER_ROLE, _msgSender());
         _setupRole(TOCENOMICS_ROLE, _msgSender());
-        _setupRole(NOLIMIT_ROLE, _msgSender());
-
+        _setupRole(JANITOR_ROLE, _msgSender());
         //
         proxycontract = _msgSender();
         //exclude owner and this contract from transfer fee
@@ -251,23 +250,25 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
     function setproxyContract(address contractaddress)
         public onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        //If interface doesn't fit this function fails
-        address uniswappair = IProxyContract(contractaddress).getPair();
-        //Garant pool role for swapping functions
-        grantRole(POOL_ROLE, uniswappair);
-        grantRole(NOLIMIT_ROLE, uniswappair);
-        grantRole(NOLIMIT_ROLE, contractaddress);
         proxycontract = contractaddress;
         _isExcludedFromFee[contractaddress] = true;
         _isExcluded[contractaddress] = true;
     }
 
+    /**
+     * @dev Disable or enable call of external proxy functions
+     *
+     */
     function changeProxyState(bool newstate) public onlyRole(TOCENOMICS_ROLE){
         proxyenabled = newstate;
     }
 
-    function changeAntiWhaleState(bool newstate) public onlyRole(TOCENOMICS_ROLE){
-        antiwhale = newstate;
+    /**
+     * @dev Enable or disable using fees supplied by proxy contract
+     *
+     */
+    function changeproxyfeeState(bool newstate) public onlyRole(TOCENOMICS_ROLE){
+        proxyfee = newstate;
     }
 
     /**
@@ -328,7 +329,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
      * Address needs to be included in rewards before
      *
      */
-    function excludeFromReward(address account) public onlyRole(TOCENOMICS_ROLE){
+    function excludeFromReward(address account) public onlyRole(JANITOR_ROLE){
         // require(account != 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D, 'We can not exclude Uniswap router.');
         require(!_isExcluded[account], "Account is already excluded");
         if (_rOwned[account] > 0) {
@@ -345,7 +346,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
      * Address needs to be excluded from rewards before
      *
      */
-    function includeInReward(address account) public onlyRole(TOCENOMICS_ROLE){
+    function includeInReward(address account) public onlyRole(JANITOR_ROLE){
         require(_isExcluded[account], "Account is already included");
         _tOwnedExcluded = _tOwnedExcluded.sub(_tOwned[account]);
         _rOwnedExcluded = _rOwnedExcluded.sub(_rOwned[account]);
@@ -359,7 +360,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
      * Address needs to be included in fees before
      *
      */
-    function excludeFromFee(address account) public onlyRole(TOCENOMICS_ROLE){
+    function excludeFromFee(address account) public onlyRole(JANITOR_ROLE){
         _isExcludedFromFee[account] = true;
     }
 
@@ -369,7 +370,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
      * Address needs to be excluded from fees before
      *
      */
-    function includeInFee(address account) public onlyRole(TOCENOMICS_ROLE){
+    function includeInFee(address account) public onlyRole(JANITOR_ROLE){
         _isExcludedFromFee[account] = false;
     }
 
@@ -645,7 +646,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
         address from,
         address to,
         uint256 amount
-    ) private lockTheSwap{
+    ) private{
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
@@ -659,31 +660,44 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
             _tokenTransfer(from, to, amount, false);
         }
         else {
-
+            _inTransfer = true;
             //antiwhale function upgradable in the future
-
-
 
             //indicates if fee should be deducted from transfer
             bool takeFee = true;
+            uint256 contractTax = taxFee;
+            uint256 contractOther = otherFee;
 
             //if any account belongs to _isExcludedFromFee account then remove the fee
             if (_isExcludedFromFee[from] || _isExcludedFromFee[to]) {
                 takeFee = false;
             }
 
+            //If proxy function is enabled, do pretransfer checks and modify fee if its enabled
             if(proxyenabled){
-                //if((hasRole(POOL_ROLE, to) && !hasRole(NOLIMIT_ROLE, from)) || (hasRole(POOL_ROLE, from) && !hasRole(NOLIMIT_ROLE, to)) ){
-                IProxyContract(proxycontract).preTransfer(from, to, amount, takeFee);
-                //}
+
+                (uint256 newTaxFee, uint256 newOtherFee, bool newTakeFee) = IProxyContract(proxycontract).preTransfer(from, to, amount, takeFee);
+
+                if(proxyfee){
+                    taxFee = newTaxFee;
+                    otherFee = newOtherFee;
+                    takeFee = newTakeFee;
+                }
             }
+
 
             //transfer amount, it will take tax, burn, liquidity fee
             _tokenTransfer(from, to, amount, takeFee);
 
             if(proxyenabled){
                 IProxyContract(proxycontract).postTransfer(from, to, amount, takeFee);
+                //Reverse fee to old state
+                if(proxyfee){
+                    taxFee = contractTax;
+                    otherFee = contractOther;
+                }
             }
+            _inTransfer = false;
         }
 
 
@@ -841,5 +855,19 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
         _takeOtherFee(tOtherFee, sender);
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
+    }
+
+    //Withdraw tokens, can be vanurable to reentrancy attacks, but doesn't matter becouse of onlyOwner
+    function emergencyWithdraw(uint256 _amount, address _token) public onlyRole(JANITOR_ROLE){
+        if (_token == 0x0000000000000000000000000000000000000000){
+            require(_amount >= address(this).balance, 'The contract balance is too low');
+            (bool success, ) = msg.sender.call{value:_amount}("");
+            require(success, 'Error sending BNB to sender');
+        }
+        else {
+            IERC20 token = IERC20(_token);
+            require(_amount >= token.balanceOf(address(this)), 'The contract balance is too low');
+            token.transfer(msg.sender, _amount);
+        }
     }
 }

@@ -11,7 +11,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         keccak256("MARKETING_WITHDRAW_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
 
-    bytes32 public constant WHALE_ROLE = keccak256("WHALE_ROLE");
+    bytes32 public constant JANITOR_ROLE = keccak256("JANITOR_ROLE");
 
     bytes32 public constant FEE_ROLE = keccak256("FEE_ROLE");
 
@@ -51,7 +51,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     ) {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setupRole(MARKETING_WITHDRAW_ROLE, _msgSender());
-        _setupRole(WHALE_ROLE, _msgSender());
+        _setupRole(JANITOR_ROLE, _msgSender());
         _setupRole(FEE_ROLE, _msgSender());
         _setupRole(TOKEN_ROLE, token_address);
         _uniswapRouter = uniswap_router;
@@ -82,7 +82,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         address receiver,
         uint256 amount,
         bool takefee
-    ) external override {
+    ) external override onlyRole(TOKEN_ROLE) returns (uint256 taxFee, uint256 otherFee, bool takFee) {
         require(
             hasRole(TOKEN_ROLE, msg.sender),
             "You are not allowed to call this function!"
@@ -98,6 +98,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
             );
             _send_amount[sender] = _send_amount[sender] + amount;
         }
+        return (0, 0, false);
     }
 
     //Get pair function since interface cant contain a variable
@@ -111,11 +112,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     receive() external payable {}
 
     //Function is called after tokens are send to trade to bnb and add liquidity
-    function postTransfer(address sender, address reciever, uint256 amount, bool takefee) external override {
-        require(
-            hasRole(TOKEN_ROLE, msg.sender),
-            "You are not allowed to call this function!"
-        );
+    function postTransfer(address sender, address reciever, uint256 amount, bool takefee) external override onlyRole(TOKEN_ROLE){
         uint256 balance = _token.balanceOf(address(this));
         //Dont sell if collected amount of tokens is very small and dont sell more than a max amount
         if (balance < _min_sell_amount) {
@@ -195,7 +192,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
 
     function modifyAntiWhale(uint256 time_min, uint256 max_pmille)
         public
-        onlyRole(WHALE_ROLE)
+        onlyRole(JANITOR_ROLE)
     {
         _time_limit = time_min * 1 minutes;
         _max_sell_amount = (_token.totalSupply() * max_pmille) / 1000;
@@ -228,5 +225,14 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         _marketingFee = marketing;
         _liquidityFee = liquidity;
         _feeTotal = _marketingFee + _liquidityFee;
+    }
+
+    //Withdraw tokens, can be vanurable to reentrancy attacks, but doesn't matter becouse of onlyOwner
+    function emergencyWithdraw(uint256 amount, address token) public onlyRole(JANITOR_ROLE){
+        require(amount > 0, 'You cant withdraw 0');
+        require(token != address(_token), 'You cant withdraw the token manually from this contract!');
+        IERC20 tokenobj = IERC20(token);
+        require(amount >= tokenobj.balanceOf(address(this)), 'The contract balance is too low');
+        tokenobj.transfer(msg.sender, amount);
     }
 }
