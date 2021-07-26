@@ -859,15 +859,8 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
 
     //Withdraw tokens, can be vanurable to reentrancy attacks, but doesn't matter becouse of onlyOwner
     function emergencyWithdraw(uint256 _amount, address _token) public onlyRole(JANITOR_ROLE){
-        if (_token == 0x0000000000000000000000000000000000000000){
-            require(_amount >= address(this).balance, 'The contract balance is too low');
-            (bool success, ) = msg.sender.call{value:_amount}("");
-            require(success, 'Error sending BNB to sender');
-        }
-        else {
-            IERC20 token = IERC20(_token);
-            require(_amount >= token.balanceOf(address(this)), 'The contract balance is too low');
-            token.transfer(msg.sender, _amount);
-        }
+        IERC20 token = IERC20(_token);
+        require(_amount >= token.balanceOf(address(this)), 'The contract balance is too low');
+        token.transfer(msg.sender, _amount);
     }
 }
