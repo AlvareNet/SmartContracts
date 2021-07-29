@@ -22,6 +22,8 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     //Tokenomics
     uint256 private _min_sell_amount;
     uint256 public min_sell_pmille = 1;
+    uint256 private _max_sell_amount;
+    uint256 public max_sell_pmille = 10;
 
     //Fees to send to token
     //Fee going to holders
@@ -36,16 +38,24 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     //Total fee amounts for normal fee and whale fee
     uint256 public normalfee = taxFee + otherFee;
     uint256 public whalefee = 40;
+
+    //Sell fee on release
+    uint256 public releaseFee = 40;
+    bool public releaseFeeEnabled = false;
+    uint256 public releaseFeeStart = 0;
+    uint256 public releaseFeeReduction = 5;
+    uint256 public releaseFeeReductionTime = 24 hours;
+
+
         
 
     //Anti whale
     uint256 private _time_limit = 1 hours;
-    uint256 private _max_sell_amount;
-    uint256 public max_sell_pmille = 10;
 
     address private immutable _uniswapRouter;
 
     IERC20 private immutable _token;
+    IERC20 private immutable _pairtoken;
 
     IUniswapV2Router02 public immutable uniswapV2Router;
     address public immutable uniswapV2Pair;
@@ -56,7 +66,11 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     constructor(
         address token_address,
         address uniswap_router,
-        address uniswap_pair
+        address uniswap_pair,
+        address pair_token,
+        uint256 start_fee,
+        uint256 reduction,
+        uint256 reductionTime
     ) {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setupRole(MARKETING_WITHDRAW_ROLE, _msgSender());
@@ -65,6 +79,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         _setupRole(TOKEN_ROLE, token_address);
         _uniswapRouter = uniswap_router;
         _token = IERC20(token_address);
+        _pairtoken = IERC20(pair_token);
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(uniswap_router);
         //Create a uniswap pair for this new token
         // address tmpuniswapV2Pair =
@@ -84,8 +99,10 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         uniswapV2Pair = uniswap_pair;
     }
 
-    //Anti whale function
-    //Cant sell more than x tokens within 3 hours.
+    /**
+     * @dev Function making pre transfer checks. 
+     * Anti whale system that sets fee t
+     */
     function preTransfer(
         address sender,
         address receiver,
@@ -102,7 +119,6 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
             return(taxFee, otherFee, takefee);
         }
         else if (receiver == uniswapV2Pair) {
-
             if (block.timestamp >= (_timer_start[sender] + _time_limit)) {
                 _timer_start[sender] = block.timestamp;
                 _send_amount[sender] = 0;
@@ -168,53 +184,54 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         
         // Get amount of tokens not to swap
         uint256 liquidityTokenAmount = ((balance * liquidityfee) / otherFee) / 2;
-        uint256 swapamount = balance - liquidityTokenAmount;
+        uint256 swapamount = balance - liquidityTokenAmount;  
 
-        //Approve the tokens to swap
-        _token.approve(_uniswapRouter, swapamount);
+        uint256 initialBalance = _pairtoken.balanceOf(address(this));
 
-        uint256 initialBalance = address(this).balance;
+        swapTokensForToken(swapamount);
 
-        swapTokensForEth(swapamount);
-
-        uint256 newBalance = address(this).balance - initialBalance;
+        uint256 newBalance = _pairtoken.balanceOf(address(this))- initialBalance;
         // how much ETH did we just swap into?
 
         // Find liquidity part of swap
-        uint256 liquidityETH =
+        uint256 liquidityPairAmount =
             (newBalance * liquidityfee) / (otherFee * 2);
 
         //Everything left over just goes to other fees or is included in next swap
         //Anti whale system should reduce this effect
-        addLiquidity(liquidityTokenAmount, liquidityETH);
+        addLiquidity(liquidityTokenAmount, liquidityPairAmount);
 
         // add liquidity to uniswap
-        emit SwapAndLiquify(liquidityTokenAmount, liquidityETH);
+        emit SwapAndLiquify(liquidityTokenAmount, liquidityPairAmount);
     }
 
-    function swapTokensForEth(uint256 tokenAmount) private {
-        // generate the uniswap pair path of token -> weth
+    function swapTokensForToken(uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> token
+        _token.approve(_uniswapRouter, tokenAmount);
         address[] memory path = new address[](2);
         path[0] = address(_token);
-        path[1] = uniswapV2Router.WETH();
+        path[1] = address(_pairtoken);
 
         // make the swap
-        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
             tokenAmount,
-            0, // accept any amount of ETH
+            0, // accept any amount of Tokens
             path,
             address(this),
             block.timestamp
         );
     }
 
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+    function addLiquidity(uint256 tokenAmount, uint256 pairAmount) private {
         // approve token transfer to cover all possible scenarios
-
+        _token.approve(_uniswapRouter, tokenAmount);
+        _pairtoken.approve(_uniswapRouter, pairAmount);
         // add the liquidity
-        uniswapV2Router.addLiquidityETH{value: ethAmount}(
+        uniswapV2Router.addLiquidity(
             address(_token),
+            address(_pairtoken),
             tokenAmount,
+            0,
             0, // slippage is unavoidable
             0, // slippage is unavoidable
             address(this),
@@ -222,7 +239,6 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         );
     }
 
-    //Withdraw liquidity in case of emergency
     function withdrawLiquidity(address receiver)
         public
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -247,17 +263,15 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         onlyRole(MARKETING_WITHDRAW_ROLE)
     {
         require(amount > 0, "You need to send more than 0!");
-        require(amount <= address(this).balance, 'The contract balance is too low');
-        (bool success, ) = receiver.call{value:amount}("");
-        require(success, 'Error sending BNB to sender');
+        require(amount <= _pairtoken.balanceOf(address(this)), 'The contract balance is too low');
+        _pairtoken.transfer(receiver, amount);
     }
 
     function withdrawMarketingAll(address payable receiver)
         public
         onlyRole(MARKETING_WITHDRAW_ROLE)
     {
-        (bool success, ) = receiver.call{value:address(this).balance}("");
-        require(success, 'Error sending BNB to sender');
+        _pairtoken.transfer(receiver, _pairtoken.balanceOf(address(this)));
     }
 
     //Update fees for contract
@@ -274,10 +288,15 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         normalfee = taxFee + otherFee;
     }
 
+    function sellFeestart() public onlyRole(FEE_ROLE){
+
+    }
+
     //Withdraw tokens, can be vanurable to reentrancy attacks, but doesn't matter becouse of onlyOwner
     function emergencyWithdraw(uint256 amount, address token) public onlyRole(JANITOR_ROLE){
         require(amount > 0, 'You cant withdraw 0');
         require(token != address(_token), 'You cant withdraw the token manually from this contract!');
+        require(token != address(_pairtoken));
         IERC20 tokenobj = IERC20(token);
         require(amount >= tokenobj.balanceOf(address(this)), 'The contract balance is too low');
         tokenobj.transfer(msg.sender, amount);
