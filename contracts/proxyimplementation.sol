@@ -119,6 +119,9 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         //Add pair adresses to white list and take max fee for everything else?
         else if (receiver == uniswapV2Pair) {
             (newTaxFee, newOtherFee) = getReleaseFee();
+            if (newTaxFee + newOtherFee <= taxFee + otherFee){
+                releaseFeeEnabled = false;
+            }
             if (block.timestamp >= (_timer_start[sender] + _time_limit)) {
                 _timer_start[sender] = block.timestamp;
                 _send_amount[sender] = 0;
@@ -309,7 +312,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         normalfee = taxFee + otherFee;
     }
 
-    function updateStartFee(uint256 fee, uint256 reduction, uint256 reductionTime) public onlyRole(FEE_ROLE){
+    function updateReleaseFee(uint256 fee, uint256 reduction, uint256 reductionTime) public onlyRole(FEE_ROLE){
         require(releaseFeeStartTime == 0, 'This can only be done before launch!');
         require(fee <= 45, 'The fee cant be higher than 45%!');
         require(releaseFee > releaseFeeReduction, 'The reduction cant be higher than the fee!');
@@ -319,7 +322,11 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         releaseFeeReductionTime = reductionTime;
     }
 
-    function sellFeestart() public onlyRole(FEE_ROLE){
+    function disableReleaseFee() public onlyRole(FEE_ROLE){
+        releaseFeeEnabled = false;
+    }
+
+    function StartReleaseFee() public onlyRole(FEE_ROLE){
         require(releaseFeeStartTime == 0, 'You can only do this once');
         releaseFeeEnabled = true;
         releaseFeeStartTime = block.timestamp;
