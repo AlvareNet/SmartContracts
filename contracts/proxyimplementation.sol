@@ -42,7 +42,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     //Sell fee on release
     uint256 public releaseFee = 40;
     bool public releaseFeeEnabled = false;
-    uint256 public releaseFeeStart = 0;
+    uint256 public releaseFeeStartTime = 0;
     uint256 public releaseFeeReduction = 5;
     uint256 public releaseFeeReductionTime = 24 hours;
 
@@ -67,10 +67,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         address token_address,
         address uniswap_router,
         address uniswap_pair,
-        address pair_token,
-        uint256 start_fee,
-        uint256 reduction,
-        uint256 reductionTime
+        address pair_token
     ) {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setupRole(MARKETING_WITHDRAW_ROLE, _msgSender());
@@ -118,22 +115,27 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         if(!takefee){
             return(taxFee, otherFee, takefee);
         }
+        //What if there is another pair?
+        //Add pair adresses to white list and take max fee for everything else?
         else if (receiver == uniswapV2Pair) {
+            (newTaxFee, newOtherFee) = getReleaseFee();
             if (block.timestamp >= (_timer_start[sender] + _time_limit)) {
                 _timer_start[sender] = block.timestamp;
                 _send_amount[sender] = 0;
             }
             //Make check of send amount is bigger than max sell amount to avoid underflow error in next if
-            if(_send_amount[sender] >= _max_sell_amount){
-                //Calculate new fee amount
-                (newTaxFee, newOtherFee) = calculateWhaleFee(0, amount, amount);
-            }
-            else if(amount > (_max_sell_amount - _send_amount[sender])){
-                //Get amount that is taxed with normal fee and whalefee
-                uint256 normalFeeAmount = _max_sell_amount - _send_amount[sender];
-                uint256 whaleFeeAmount = amount - normalFeeAmount;
-                (newTaxFee, newOtherFee) = calculateWhaleFee(normalFeeAmount, whaleFeeAmount, amount);
+            if((newTaxFee + newOtherFee) < whalefee){
+                if(_send_amount[sender] >= _max_sell_amount){
+                    //Calculate new fee amount
+                    (newTaxFee, newOtherFee) = calculateWhaleFee(0, amount, amount);
+                }
+                else if(amount > (_max_sell_amount - _send_amount[sender])){
+                    //Get amount that is taxed with normal fee and whalefee
+                    uint256 normalFeeAmount = _max_sell_amount - _send_amount[sender];
+                    uint256 whaleFeeAmount = amount - normalFeeAmount;
+                    (newTaxFee, newOtherFee) = calculateWhaleFee(normalFeeAmount, whaleFeeAmount, amount);
 
+                }
             }
             _send_amount[sender] = _send_amount[sender] + amount;
         }
@@ -156,6 +158,25 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         newotherFee = totalFee * otherFee / totalFee;
         return (newtaxFee, newotherFee);
     }
+
+    function getReleaseFee() public view returns(uint256 releaseTaxFee, uint256 releaseOtherFee){
+        if(!releaseFeeEnabled || releaseFeeStartTime == 0){
+            return (taxFee, otherFee);
+        }
+        uint256 timeSinceStart = block.timestamp - releaseFeeStartTime;
+        uint256 reductionFactor = timeSinceStart / releaseFeeReductionTime;
+        if((releaseFeeReduction * reductionFactor) >= releaseFee){
+            return (taxFee, otherFee);
+        }
+        uint256 newFee = releaseFee - (reductionFactor * releaseFeeReduction);
+        if(newFee <= (taxFee + otherFee)){
+            return (taxFee, otherFee);
+        }
+        releaseTaxFee = newFee * taxFee / (taxFee + otherFee);
+        releaseOtherFee = newFee * otherFee / (taxFee + otherFee);
+        return (releaseTaxFee, releaseOtherFee);
+    }
+
 
     //Get pair function since interface cant contain a variable
     function getPair() external view override returns (address) {
@@ -288,8 +309,20 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         normalfee = taxFee + otherFee;
     }
 
-    function sellFeestart() public onlyRole(FEE_ROLE){
+    function updateStartFee(uint256 fee, uint256 reduction, uint256 reductionTime) public onlyRole(FEE_ROLE){
+        require(releaseFeeStartTime == 0, 'This can only be done before launch!');
+        require(fee <= 45, 'The fee cant be higher than 45%!');
+        require(releaseFee > releaseFeeReduction, 'The reduction cant be higher than the fee!');
+        require(reductionTime < 120 hours, 'The max reduction time pr step is 5 days!');
+        releaseFee = fee;
+        releaseFeeReduction = reduction;
+        releaseFeeReductionTime = reductionTime;
+    }
 
+    function sellFeestart() public onlyRole(FEE_ROLE){
+        require(releaseFeeStartTime == 0, 'You can only do this once');
+        releaseFeeEnabled = true;
+        releaseFeeStartTime = block.timestamp;
     }
 
     //Withdraw tokens, can be vanurable to reentrancy attacks, but doesn't matter becouse of onlyOwner
