@@ -7,15 +7,11 @@ import "./interfaces/uniswapinterface.sol";
 import "./interfaces/proxyinterface.sol";
 
 contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
-    bytes32 public constant DONATION_WITHDRAW_ROLE =
-        keccak256("DONATION_WITHDRAW_ROLE");
     bytes32 public constant MARKETING_WITHDRAW_ROLE =
         keccak256("MARKETING_WITHDRAW_ROLE");
-    bytes32 public constant OTHER_WITHDRAW_ROLE =
-        keccak256("OTHER_WITHDRAW_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
 
-    bytes32 public constant WHALE_ROLE = keccak256("WHALE_ROLE");
+    bytes32 public constant JANITOR_ROLE = keccak256("JANITOR_ROLE");
 
     bytes32 public constant FEE_ROLE = keccak256("FEE_ROLE");
 
@@ -26,48 +22,61 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     //Tokenomics
     uint256 private _min_sell_amount;
     uint256 public min_sell_pmille = 1;
-
-    uint256 public _liquidityFee = 5;
-    uint256 public _donationFee = 2;
-    uint256 public _marketingFee = 1;
-    uint256 public _otherFee = 0;
-    uint256 public _feeTotal =
-        _liquidityFee + _donationFee + _marketingFee + _otherFee;
-
-    uint256 public assessed_balance = 0;
-    uint256 public assessed_donation_balance = 0;
-    uint256 public assessed_marketing_balance = 0;
-    uint256 public assessed_other_balance = 0;
-    //Anti whale
-    uint256 private _time_limit = 1 hours;
     uint256 private _max_sell_amount;
     uint256 public max_sell_pmille = 10;
+
+    //Fees to send to token
+    //Fee going to holders
+    uint256 public taxFee = 3;
+    //Fee going to this contract
+    uint256 public otherFee = liquidityfee + marketingfee;
+
+    //Other fee distribution
+    uint256 public liquidityfee = 4;
+    uint256 public marketingfee = 3;
+
+    //Total fee amounts for normal fee and whale fee
+    uint256 public normalfee = taxFee + otherFee;
+    uint256 public whalefee = 40;
+
+    //Sell fee on release
+    uint256 public releaseFee = 40;
+    bool public releaseFeeEnabled = false;
+    uint256 public releaseFeeStartTime = 0;
+    uint256 public releaseFeeReduction = 5;
+    uint256 public releaseFeeReductionTime = 24 hours;
+
+
+        
+
+    //Anti whale
+    uint256 private _time_limit = 1 hours;
 
     address private immutable _uniswapRouter;
 
     IERC20 private immutable _token;
+    IERC20 private immutable _pairtoken;
 
     IUniswapV2Router02 public immutable uniswapV2Router;
     address public immutable uniswapV2Pair;
     IUniswapV2Pair private immutable _uniswapV2Pair;
 
-    event TokensReceived(uint256);
     event SwapAndLiquify(uint256, uint256);
 
     constructor(
         address token_address,
         address uniswap_router,
-        address uniswap_pair
+        address uniswap_pair,
+        address pair_token
     ) {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _setupRole(DONATION_WITHDRAW_ROLE, _msgSender());
         _setupRole(MARKETING_WITHDRAW_ROLE, _msgSender());
-        _setupRole(OTHER_WITHDRAW_ROLE, _msgSender());
-        _setupRole(WHALE_ROLE, _msgSender());
+        _setupRole(JANITOR_ROLE, _msgSender());
         _setupRole(FEE_ROLE, _msgSender());
         _setupRole(TOKEN_ROLE, token_address);
         _uniswapRouter = uniswap_router;
         _token = IERC20(token_address);
+        _pairtoken = IERC20(pair_token);
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(uniswap_router);
         //Create a uniswap pair for this new token
         // address tmpuniswapV2Pair =
@@ -87,30 +96,90 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         uniswapV2Pair = uniswap_pair;
     }
 
-    //Anti whale function
-    //Cant sell more than x tokens within 3 hours.
+    /**
+     * @dev Function making pre transfer checks. 
+     * Anti whale system that sets fee t
+     */
     function preTransfer(
         address sender,
         address receiver,
         uint256 amount,
         bool takefee
-    ) external override {
+    ) external override onlyRole(TOKEN_ROLE) returns (uint256 newTaxFee, uint256 newOtherFee, bool _takFee) {
         require(
             hasRole(TOKEN_ROLE, msg.sender),
             "You are not allowed to call this function!"
         );
-        if (receiver == uniswapV2Pair) {
+        newTaxFee = taxFee;
+        newOtherFee = otherFee;
+        if(!takefee){
+            return(taxFee, otherFee, takefee);
+        }
+        //What if there is another pair?
+        //Add pair adresses to white list and take max fee for everything else?
+        else if (receiver == uniswapV2Pair) {
+            (newTaxFee, newOtherFee) = getReleaseFee();
+            if (newTaxFee + newOtherFee <= taxFee + otherFee){
+                releaseFeeEnabled = false;
+            }
             if (block.timestamp >= (_timer_start[sender] + _time_limit)) {
                 _timer_start[sender] = block.timestamp;
                 _send_amount[sender] = 0;
             }
-            require(
-                amount <= (_max_sell_amount - _send_amount[sender]),
-                "You have reached your sell limit!"
-            );
+            //Make check of send amount is bigger than max sell amount to avoid underflow error in next if
+            if((newTaxFee + newOtherFee) < whalefee){
+                if(_send_amount[sender] >= _max_sell_amount){
+                    //Calculate new fee amount
+                    (newTaxFee, newOtherFee) = calculateWhaleFee(0, amount, amount);
+                }
+                else if(amount > (_max_sell_amount - _send_amount[sender])){
+                    //Get amount that is taxed with normal fee and whalefee
+                    uint256 normalFeeAmount = _max_sell_amount - _send_amount[sender];
+                    uint256 whaleFeeAmount = amount - normalFeeAmount;
+                    (newTaxFee, newOtherFee) = calculateWhaleFee(normalFeeAmount, whaleFeeAmount, amount);
+
+                }
+            }
             _send_amount[sender] = _send_amount[sender] + amount;
         }
+        return (newTaxFee, newOtherFee, takefee);
     }
+
+    /**
+     * @dev Calculate fee, based on amount that is taxed with whale fee and the amount that is taxed with the normalfee.
+     * NormalFee amount can be 0
+     * Returns taxFee and otherFee
+     */
+    function calculateWhaleFee(uint256 normalFeeAmount, uint256 whaleFeeAmount, uint256 totalAmount) private view returns(uint256 newtaxFee, uint256 newotherFee){
+        require(whaleFeeAmount > 0, 'Whale fee amount must be bigger than 0!');
+        require(totalAmount > 0, 'Total amount must be bigger than 0!');
+        //Check if normalFeeAmount is over 0 to avoid errors
+        normalFeeAmount = normalFeeAmount > 0 ? normalFeeAmount * (taxFee + otherFee) / 100 : 0;
+        whaleFeeAmount = whaleFeeAmount * whalefee / 100;
+        uint256 totalFee = (normalFeeAmount + whaleFeeAmount) * 100 / totalAmount;
+        newtaxFee = totalFee * taxFee / totalFee; 
+        newotherFee = totalFee * otherFee / totalFee;
+        return (newtaxFee, newotherFee);
+    }
+
+    function getReleaseFee() public view returns(uint256 releaseTaxFee, uint256 releaseOtherFee){
+        if(!releaseFeeEnabled || releaseFeeStartTime == 0){
+            return (taxFee, otherFee);
+        }
+        uint256 timeSinceStart = block.timestamp - releaseFeeStartTime;
+        uint256 reductionFactor = timeSinceStart / releaseFeeReductionTime;
+        if((releaseFeeReduction * reductionFactor) >= releaseFee){
+            return (taxFee, otherFee);
+        }
+        uint256 newFee = releaseFee - (reductionFactor * releaseFeeReduction);
+        if(newFee <= (taxFee + otherFee)){
+            return (taxFee, otherFee);
+        }
+        releaseTaxFee = newFee * taxFee / (taxFee + otherFee);
+        releaseOtherFee = newFee * otherFee / (taxFee + otherFee);
+        return (releaseTaxFee, releaseOtherFee);
+    }
+
 
     //Get pair function since interface cant contain a variable
     function getPair() external view override returns (address) {
@@ -122,12 +191,11 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
      */
     receive() external payable {}
 
-    //Function is called after tokens are send to trade to bnb and add liquidity
-    function postTransfer(address sender, address reciever, uint256 amount, bool takefee) external override {
-        require(
-            hasRole(TOKEN_ROLE, msg.sender),
-            "You are not allowed to call this function!"
-        );
+    /**
+     * @dev Function is called after tokens are send to trade to bnb and add liquidity
+     * Inputs are sender, reciever, amount and if fee is taken. No every variable is used, but can be useful in future modifications
+     */
+    function postTransfer(address sender, address reciever, uint256 amount, bool takefee) external override onlyRole(TOKEN_ROLE){
         uint256 balance = _token.balanceOf(address(this));
         //Dont sell if collected amount of tokens is very small and dont sell more than a max amount
         if (balance < _min_sell_amount) {
@@ -137,58 +205,57 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         if (balance > _max_sell_amount) {
             balance = _max_sell_amount;
         }
-        _token.approve(_uniswapRouter, balance);
-        // split the LiquidityFee balance into halves
-        uint256 liquidityfee = (balance * _liquidityFee) / _feeTotal;
-        uint256 otherfees = (balance * (_feeTotal - _liquidityFee)) / _feeTotal;
+        
+        // Get amount of tokens not to swap
+        uint256 liquidityTokenAmount = ((balance * liquidityfee) / otherFee) / 2;
+        uint256 swapamount = balance - liquidityTokenAmount;  
 
-        // capture the contract's current ETH balance.
-        // this is so that we can capture exactly the amount of ETH that the
-        // swap creates, and not make the liquidity event include any ETH that
-        // has been manually sent to the contract
-        uint256 initialBalance = address(this).balance;
+        uint256 initialBalance = _pairtoken.balanceOf(address(this));
 
-        swapTokensForEth(otherfees + (_liquidityFee / 2));
+        swapTokensForToken(swapamount);
 
-        uint256 newBalance = address(this).balance - initialBalance;
+        uint256 newBalance = _pairtoken.balanceOf(address(this))- initialBalance;
         // how much ETH did we just swap into?
 
         // Find liquidity part of swap
-        uint256 liquidityBalance =
-            (newBalance * _liquidityFee) / (_feeTotal * 2);
+        uint256 liquidityPairAmount =
+            (newBalance * liquidityfee) / (otherFee * 2);
 
         //Everything left over just goes to other fees or is included in next swap
         //Anti whale system should reduce this effect
-        addLiquidity(liquidityfee / 2, liquidityBalance);
+        addLiquidity(liquidityTokenAmount, liquidityPairAmount);
 
         // add liquidity to uniswap
-        emit TokensReceived(balance);
-        emit SwapAndLiquify(liquidityfee / 2, liquidityBalance);
+        emit SwapAndLiquify(liquidityTokenAmount, liquidityPairAmount);
     }
 
-    function swapTokensForEth(uint256 tokenAmount) private {
-        // generate the uniswap pair path of token -> weth
+    function swapTokensForToken(uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> token
+        _token.approve(_uniswapRouter, tokenAmount);
         address[] memory path = new address[](2);
         path[0] = address(_token);
-        path[1] = uniswapV2Router.WETH();
+        path[1] = address(_pairtoken);
 
         // make the swap
-        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
             tokenAmount,
-            0, // accept any amount of ETH
+            0, // accept any amount of Tokens
             path,
             address(this),
             block.timestamp
         );
     }
 
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+    function addLiquidity(uint256 tokenAmount, uint256 pairAmount) private {
         // approve token transfer to cover all possible scenarios
-
+        _token.approve(_uniswapRouter, tokenAmount);
+        _pairtoken.approve(_uniswapRouter, pairAmount);
         // add the liquidity
-        uniswapV2Router.addLiquidityETH{value: ethAmount}(
+        uniswapV2Router.addLiquidity(
             address(_token),
+            address(_pairtoken),
             tokenAmount,
+            0,
             0, // slippage is unavoidable
             0, // slippage is unavoidable
             address(this),
@@ -196,7 +263,6 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         );
     }
 
-    //Withdraw liquidity in case of emergency
     function withdrawLiquidity(address receiver)
         public
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -205,31 +271,15 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         _uniswapV2Pair.transfer(receiver, balance);
     }
 
-    function modifyAntiWhale(uint256 time_min, uint256 max_pmille)
+    function modifyAntiWhale(uint256 time_min, uint256 max_pmille, uint256 fee)
         public
-        onlyRole(WHALE_ROLE)
+        onlyRole(JANITOR_ROLE)
     {
+        require(fee < 49, 'The fee is too high!');
         _time_limit = time_min * 1 minutes;
         _max_sell_amount = (_token.totalSupply() * max_pmille) / 1000;
         max_sell_pmille = max_pmille;
-    }
-
-    //Withdraw functions
-    //First update fee balances and check if enough BNB is in wallet to withdraw.
-    //Remove payed out amount from specific wallet
-    function withdrawDonation(address payable receiver, uint256 amount)
-        public
-        onlyRole(DONATION_WITHDRAW_ROLE)
-    {
-        require(amount > 0, "You need to send more than 0!");
-        updateFeeBalances();
-        require(
-            assessed_donation_balance >= amount,
-                "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(amount);
-        assessed_donation_balance = assessed_donation_balance - amount;
-        assessed_balance = assessed_balance - amount;
+        whalefee = fee;
     }
 
     function withdrawMarketing(address payable receiver, uint256 amount)
@@ -237,191 +287,58 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         onlyRole(MARKETING_WITHDRAW_ROLE)
     {
         require(amount > 0, "You need to send more than 0!");
-        updateFeeBalances();
-        require(
-            assessed_marketing_balance >= amount,
-                "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(amount);
-        assessed_marketing_balance = assessed_marketing_balance - amount;
-        assessed_balance = assessed_balance - amount;
-    }
-
-    function withdrawOther(address payable receiver, uint256 amount)
-        public
-        onlyRole(OTHER_WITHDRAW_ROLE)
-    {
-        require(amount > 0, "You need to send more than 0!");
-        updateFeeBalances();
-        require(
-            assessed_other_balance >= amount,
-                "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(amount);
-        assessed_other_balance = assessed_other_balance - amount;
-        assessed_balance = assessed_balance - amount;
-    }
-
-    function withdrawDonationAll(address payable receiver)
-        public
-        onlyRole(DONATION_WITHDRAW_ROLE)
-    {
-        updateFeeBalances();
-        require(
-            assessed_donation_balance > 0,
-            "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(assessed_donation_balance);
-        assessed_balance = assessed_balance - assessed_donation_balance;
-        assessed_donation_balance = 0;
+        require(amount <= _pairtoken.balanceOf(address(this)), 'The contract balance is too low');
+        _pairtoken.transfer(receiver, amount);
     }
 
     function withdrawMarketingAll(address payable receiver)
         public
         onlyRole(MARKETING_WITHDRAW_ROLE)
     {
-        updateFeeBalances();
-        require(
-            assessed_marketing_balance > 0,
-            "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(assessed_marketing_balance);
-        assessed_balance = assessed_balance - assessed_marketing_balance;
-        assessed_marketing_balance = 0;
-    }
-
-    function withdrawOtherAll(address payable receiver)
-        public
-        onlyRole(OTHER_WITHDRAW_ROLE)
-    {
-        updateFeeBalances();
-        require(
-            assessed_other_balance > 0,
-            "Insufficient BNB balance in contract!"
-        );
-        receiver.transfer(assessed_other_balance);
-        assessed_balance = assessed_balance - assessed_other_balance;
-        assessed_other_balance = 0;
-    }
-
-    //Show balances of contract without writing to contract
-
-    function showMarketingBalance() public view returns (uint256) {
-        uint256 balance;
-        (, balance, , ) = getBalances();
-        return balance;
-    }
-
-    function showDonationBalance() public view returns (uint256) {
-        uint256 balance;
-        (balance, , , ) = getBalances();
-        return balance;
-    }
-
-    function showOtherBalance() public view returns (uint256) {
-        uint256 balance;
-        (, , balance, ) = getBalances();
-        return balance;
+        _pairtoken.transfer(receiver, _pairtoken.balanceOf(address(this)));
     }
 
     //Update fees for contract
     function updateFees(
-        uint256 donation,
+        uint256 tax,
         uint256 marketing,
-        uint256 liquidity,
-        uint256 other
+        uint256 liquidity
     ) public onlyRole(FEE_ROLE) {
-        updateFeeBalances();
-        _donationFee = donation;
-        _marketingFee = marketing;
-        _liquidityFee = liquidity;
-        _otherFee = other;
-        _feeTotal = _donationFee + _marketingFee + _liquidityFee + _otherFee;
+        require((tax + marketing + liquidity) < 20, 'The normal fee cant be higher than 20%!');
+        taxFee = tax;
+        marketingfee = marketing;
+        liquidityfee = liquidity;
+        otherFee = marketingfee + liquidityfee;
+        normalfee = taxFee + otherFee;
     }
 
-    //Update balances for different fee accounts to keep track of how much there is left for which fee
-    //Write updated balances to contract
-    function updateFeeBalances() private {
-        uint256 _donation_balance;
-        uint256 _marketing_balance;
-        uint256 _other_balance;
-        uint256 _assessed_balance;
-        (
-            _donation_balance,
-            _marketing_balance,
-            _other_balance,
-            _assessed_balance
-        ) = getBalances();
-        assessed_donation_balance = _donation_balance;
-        assessed_marketing_balance = _marketing_balance;
-        assessed_other_balance = _other_balance;
-        assessed_balance = _assessed_balance;
+    function updateReleaseFee(uint256 fee, uint256 reduction, uint256 reductionTime) public onlyRole(FEE_ROLE){
+        require(releaseFeeStartTime == 0, 'This can only be done before launch!');
+        require(fee <= 45, 'The fee cant be higher than 45%!');
+        require(releaseFee > releaseFeeReduction, 'The reduction cant be higher than the fee!');
+        require(reductionTime < 120 hours, 'The max reduction time pr step is 5 days!');
+        releaseFee = fee;
+        releaseFeeReduction = reduction;
+        releaseFeeReductionTime = reductionTime;
     }
 
-    function getBalances()
-        private
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        uint256 not_assessed = address(this).balance - assessed_balance;
-        uint256 _donation_balance;
-        uint256 _marketing_balance;
-        uint256 _other_balance;
-        uint256 _assessed_balance;
-        uint256 tmp_feeTotal = _donationFee + _marketingFee + _otherFee;
-        //Check if balances are already up to date and avoid rounding error
-        if (not_assessed >= tmp_feeTotal) {
-            //Calculate updated balances
-            //to avoid rounding errors
-            //Find added balances based on not assessed amount and fees
-            uint256 added_donation_balance =
-                (
-                    (_donationFee > 0)
-                        ? ((not_assessed * _donationFee) / tmp_feeTotal)
-                        : 0
-                );
-            uint256 added_marketing_balance =
-                (
-                    (_marketingFee > 0)
-                        ? ((not_assessed * _marketingFee) / tmp_feeTotal)
-                        : 0
-                );
-            uint256 added_other_balance =
-                (
-                    (_otherFee > 0)
-                        ? ((not_assessed * _otherFee) / tmp_feeTotal)
-                        : 0
-                );
+    function disableReleaseFee() public onlyRole(FEE_ROLE){
+        releaseFeeEnabled = false;
+    }
 
-            _donation_balance = assessed_donation_balance + added_donation_balance;
-            _marketing_balance = assessed_marketing_balance + added_marketing_balance;
-            _other_balance = assessed_other_balance + added_other_balance;
-            _assessed_balance =
-                assessed_balance +
-                added_other_balance +
-                added_marketing_balance +
-                added_donation_balance;
-            return (
-                _donation_balance,
-                _marketing_balance,
-                _other_balance,
-                _assessed_balance
-            );
-        }
-        _donation_balance = assessed_donation_balance;
-        _marketing_balance = assessed_marketing_balance;
-        _other_balance = assessed_other_balance;
-        _assessed_balance = assessed_balance;
-        return (
-            _donation_balance,
-            _marketing_balance,
-            _other_balance,
-            _assessed_balance
-        );
+    function StartReleaseFee() public onlyRole(FEE_ROLE){
+        require(releaseFeeStartTime == 0, 'You can only do this once');
+        releaseFeeEnabled = true;
+        releaseFeeStartTime = block.timestamp;
+    }
+
+    //Withdraw tokens, can be vanurable to reentrancy attacks, but doesn't matter becouse of onlyOwner
+    function emergencyWithdraw(uint256 amount, address token) public onlyRole(JANITOR_ROLE){
+        require(amount > 0, 'You cant withdraw 0');
+        require(token != address(_token), 'You cant withdraw the token manually from this contract!');
+        require(token != address(_pairtoken));
+        IERC20 tokenobj = IERC20(token);
+        require(amount >= tokenobj.balanceOf(address(this)), 'The contract balance is too low');
+        tokenobj.transfer(msg.sender, amount);
     }
 }
