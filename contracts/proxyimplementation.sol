@@ -15,8 +15,8 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
 
     bytes32 public constant FEE_ROLE = keccak256("FEE_ROLE");
 
-    mapping(address => uint256) public _send_amount;
-    mapping(address => uint256) public _timer_start;
+    mapping(address => uint256) public send_amount;
+    mapping(address => uint256) public timer_start;
 
     //Modifiable values
     //Tokenomics
@@ -45,7 +45,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     uint256 public releaseFeeReductionTime = 24 hours;
 
     //Anti whale
-    uint256 private _time_limit = 1 hours;
+    uint256 public time_limit = 12 hours;
 
     address private immutable _uniswapRouter;
 
@@ -126,23 +126,23 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
             if (newTaxFee + newOtherFee <= taxFee + otherFee) {
                 releaseFeeEnabled = false;
             }
-            if (block.timestamp >= (_timer_start[sender] + _time_limit)) {
-                _timer_start[sender] = block.timestamp;
-                _send_amount[sender] = 0;
+            if (block.timestamp >= (timer_start[sender] + time_limit)) {
+                timer_start[sender] = block.timestamp;
+                send_amount[sender] = 0;
             }
             //Make check of send amount is bigger than max sell amount to avoid underflow error in next if
             if ((newTaxFee + newOtherFee) < whalefee) {
-                if (_send_amount[sender] >= max_sell_amount) {
+                if (send_amount[sender] >= max_sell_amount) {
                     //Calculate new fee amount
                     (newTaxFee, newOtherFee) = calculateWhaleFee(
                         0,
                         amount,
                         amount
                     );
-                } else if (amount > (max_sell_amount - _send_amount[sender])) {
+                } else if (amount > (max_sell_amount - send_amount[sender])) {
                     //Get amount that is taxed with normal fee and whalefee
                     uint256 normalFeeAmount = max_sell_amount -
-                        _send_amount[sender];
+                        send_amount[sender];
                     uint256 whaleFeeAmount = amount - normalFeeAmount;
                     (newTaxFee, newOtherFee) = calculateWhaleFee(
                         normalFeeAmount,
@@ -151,7 +151,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
                     );
                 }
             }
-            _send_amount[sender] = _send_amount[sender] + amount;
+            send_amount[sender] = send_amount[sender] + amount;
         }
         return (newTaxFee, newOtherFee, takefee);
     }
@@ -305,7 +305,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         onlyRole(JANITOR_ROLE)
     {
         require(fee < 49, "The fee is too high!");
-        _time_limit = time_min * 1 minutes;
+        time_limit = time_min * 1 minutes;
         whalefee = fee;
     }
 
