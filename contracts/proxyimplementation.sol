@@ -15,15 +15,13 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
 
     bytes32 public constant FEE_ROLE = keccak256("FEE_ROLE");
 
-    mapping(address => uint256) private _send_amount;
-    mapping(address => uint256) private _timer_start;
+    mapping(address => uint256) public _send_amount;
+    mapping(address => uint256) public _timer_start;
 
     //Modifiable values
     //Tokenomics
-    uint256 private _min_sell_amount;
-    uint256 public min_sell_pmille = 1;
-    uint256 private _max_sell_amount;
-    uint256 public max_sell_pmille = 10;
+    uint256 public min_sell_amount = 1000000000000 * 10 ** 9;
+    uint256 public max_sell_amount = 10000000000000 * 10 ** 9;
 
     //Fees to send to token
     //Fee going to holders
@@ -88,12 +86,6 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         //         tokenaddress,
         //         _uniswapV2Router.WETH()
         //     );
-        _max_sell_amount =
-            (IERC20(token_address).totalSupply() * max_sell_pmille) /
-            1000;
-        _min_sell_amount =
-            (IERC20(token_address).totalSupply() * min_sell_pmille) /
-            1000;
         // set the rest of the contract variables
         uniswapV2Router = _uniswapV2Router;
         _uniswapV2Pair = IUniswapV2Pair(uniswap_pair);
@@ -132,13 +124,13 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
             }
             //Make check of send amount is bigger than max sell amount to avoid underflow error in next if
             if((newTaxFee + newOtherFee) < whalefee){
-                if(_send_amount[sender] >= _max_sell_amount){
+                if(_send_amount[sender] >= max_sell_amount){
                     //Calculate new fee amount
                     (newTaxFee, newOtherFee) = calculateWhaleFee(0, amount, amount);
                 }
-                else if(amount > (_max_sell_amount - _send_amount[sender])){
+                else if(amount > (max_sell_amount - _send_amount[sender])){
                     //Get amount that is taxed with normal fee and whalefee
-                    uint256 normalFeeAmount = _max_sell_amount - _send_amount[sender];
+                    uint256 normalFeeAmount = max_sell_amount - _send_amount[sender];
                     uint256 whaleFeeAmount = amount - normalFeeAmount;
                     (newTaxFee, newOtherFee) = calculateWhaleFee(normalFeeAmount, whaleFeeAmount, amount);
 
@@ -202,12 +194,12 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     function postTransfer(address sender, address reciever, uint256 amount, bool takefee) external override onlyRole(TOKEN_ROLE){
         uint256 balance = _token.balanceOf(address(this));
         //Dont sell if collected amount of tokens is very small and dont sell more than a max amount
-        if (balance < _min_sell_amount) {
+        if (balance < min_sell_amount) {
             return;
         }
 
-        if (balance > _max_sell_amount) {
-            balance = _max_sell_amount;
+        if (balance > max_sell_amount) {
+            balance = max_sell_amount;
         }
         
         // Get amount of tokens not to swap
@@ -276,15 +268,24 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         _uniswapV2Pair.transfer(receiver, balance);
     }
 
-    function modifyAntiWhale(uint256 time_min, uint256 max_pmille, uint256 fee)
+    function modifyAntiWhale(uint256 time_min, uint256 fee)
         public
         onlyRole(JANITOR_ROLE)
     {
         require(fee < 49, 'The fee is too high!');
         _time_limit = time_min * 1 minutes;
-        _max_sell_amount = (_token.totalSupply() * max_pmille) / 1000;
-        max_sell_pmille = max_pmille;
         whalefee = fee;
+    }
+
+    function changeMaxSell(uint256 max) public onlyRole(JANITOR_ROLE){
+        require(max > min_sell_amount, "Max amount needs to be bigger than min sell amount");
+        require(max < _pairtoken.totalSupply(), "Max amount needs to be less than total supply");
+        max_sell_amount = max;
+    }
+
+    function changeMinSell(uint256 min) public onlyRole(JANITOR_ROLE){
+        require(min < max_sell_amount, "Max amount needs to be bigger than min sell amount");
+        min_sell_amount = min;
     }
 
     function withdrawMarketing(address payable receiver, uint256 amount)
