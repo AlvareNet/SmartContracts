@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./interfaces/proxyinterface.sol";
 
-contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
+contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
 
     //using safe math to not rewrite even though its not needed anymore
     using SafeMath for uint256;
@@ -37,7 +37,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
 
     //Calculate initial total supply and total reflection value
     uint256 private constant MAX = ~uint256(0);
-    uint256 private _tTotal = 1273628335437 * 10**9;
+    uint256 private constant _tTotal = 1273628335437 * 10**9;
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
@@ -46,9 +46,9 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
     bool public proxyenabled = false;
 
     //Define initial contract settings
-    string private _name = "Samari";
-    string private _symbol = "SAMA";
-    uint8 private _decimals = 9;
+    string private constant _name = "AlvareNET";
+    string private constant _symbol = "ALVN";
+    uint8 private constant _decimals = 9;
 
     uint256 public taxFee = 3;
     uint256 private _previousTaxFee = taxFee;
@@ -56,7 +56,7 @@ contract Samari is Context, IERC20, Pausable, AccessControlEnumerable {
     uint256 public otherFee = 7;
     uint256 private _previousOtherFee = otherFee;
 
-    uint256 public maxFeeTotal = 40;
+    uint256 public constant maxFeeTotal = 40;
 
     address public proxycontract;
 
