@@ -90,7 +90,7 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
      * @dev Get the token name
      *
      */
-    function name() public view returns (string memory) {
+    function name() public pure returns (string memory) {
         return _name;
     }
 
@@ -98,7 +98,7 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
      * @dev Get the token symbol
      *
      */
-    function symbol() public view returns (string memory) {
+    function symbol() public pure returns (string memory) {
         return _symbol;
     }
 
@@ -106,7 +106,7 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
      * @dev Get the decimals for token
      *
      */
-    function decimals() public view returns (uint8) {
+    function decimals() public pure returns (uint8) {
         return _decimals;
     }
 
@@ -114,7 +114,7 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
      * @dev Get the total token supply
      *
      */
-    function totalSupply() public view override returns (uint256) {
+    function totalSupply() public pure override returns (uint256) {
         return _tTotal;
     }
 

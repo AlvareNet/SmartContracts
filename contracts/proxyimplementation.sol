@@ -3,10 +3,11 @@ pragma solidity 0.8.7;
 
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interfaces/uniswapinterface.sol";
 import "./interfaces/proxyinterface.sol";
 
-contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
+contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable, ReentrancyGuard {
     bytes32 public constant MARKETING_WITHDRAW_ROLE =
         keccak256("MARKETING_WITHDRAW_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
@@ -221,7 +222,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         address reciever,
         uint256 amount,
         bool takefee
-    ) external override onlyRole(TOKEN_ROLE) {
+    ) external override onlyRole(TOKEN_ROLE) nonReentrant() {
         uint256 balance = _token.balanceOf(address(this));
         //Dont sell if collected amount of tokens is very small and dont sell more than a max amount
         if (balance < min_sell_amount) {
