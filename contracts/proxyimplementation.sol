@@ -69,6 +69,10 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         address uniswap_pair,
         address pair_token
     ) {
+        require(token_address != address(0x0));
+        require(uniswap_router != address(0x0));
+        require(uniswap_pair != address(0x0));
+        require(pair_token != address(0x0));
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setupRole(MARKETING_WITHDRAW_ROLE, _msgSender());
         _setupRole(JANITOR_ROLE, _msgSender());
@@ -267,6 +271,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         public
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
+        require(receiver != address(0x0), "Withdraw address cant be 0!");
         uint256 balance = _uniswapV2Pair.balanceOf(address(this));
         _uniswapV2Pair.transfer(receiver, balance);
     }
@@ -286,6 +291,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         public
         onlyRole(MARKETING_WITHDRAW_ROLE)
     {
+        require(receiver != address(0x0), "Withdraw address cant be 0!");
         require(amount > 0, "You need to send more than 0!");
         require(amount <= _pairtoken.balanceOf(address(this)), 'The contract balance is too low');
         _pairtoken.transfer(receiver, amount);
@@ -295,6 +301,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         public
         onlyRole(MARKETING_WITHDRAW_ROLE)
     {
+        require(receiver != address(0x0), "Withdraw address cant be 0!");
         _pairtoken.transfer(receiver, _pairtoken.balanceOf(address(this)));
     }
 
