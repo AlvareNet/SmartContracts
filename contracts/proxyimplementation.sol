@@ -27,7 +27,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
 
     //Fees to send to token
     //Fee going to holders
-    uint256 public taxFee = 3;
+    uint256 public taxFee = 4;
     //Fee going to this contract
     uint256 public otherFee = liquidityfee + marketingfee;
 

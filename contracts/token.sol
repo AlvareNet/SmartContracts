@@ -37,7 +37,7 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
 
     //Calculate initial total supply and total reflection value
     uint256 private constant MAX = ~uint256(0);
-    uint256 private constant _tTotal = 1273628335437 * 10**9;
+    uint256 private constant _tTotal = 1000000000000000 * 10**9;
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
@@ -50,7 +50,7 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
     string private constant _symbol = "ALVN";
     uint8 private constant _decimals = 9;
 
-    uint256 public taxFee = 3;
+    uint256 public taxFee = 4;
     uint256 private _previousTaxFee = taxFee;
 
     uint256 public otherFee = 7;
