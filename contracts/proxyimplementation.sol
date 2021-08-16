@@ -20,8 +20,8 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
 
     //Modifiable values
     //Tokenomics
-    uint256 public min_sell_amount = 1000000000000 * 10 ** 9;
-    uint256 public max_sell_amount = 10000000000000 * 10 ** 9;
+    uint256 public min_sell_amount = 1000000000000 * 10**9;
+    uint256 public max_sell_amount = 10000000000000 * 10**9;
 
     //Fees to send to token
     //Fee going to holders
@@ -43,9 +43,6 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     uint256 public releaseFeeStartTime = 0;
     uint256 public releaseFeeReduction = 5;
     uint256 public releaseFeeReductionTime = 24 hours;
-
-
-        
 
     //Anti whale
     uint256 private _time_limit = 1 hours;
@@ -79,7 +76,9 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         _uniswapRouter = uniswap_router;
         _token = IERC20(token_address);
         _pairtoken = IERC20(pair_token);
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(uniswap_router);
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(
+            uniswap_router
+        );
         //Create a uniswap pair for this new token
         // address tmpuniswapV2Pair =
         //     IUniswapV2Factory(_uniswapV2Router.factory()).createPair(
@@ -93,7 +92,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     }
 
     /**
-     * @dev Function making pre transfer checks. 
+     * @dev Function making pre transfer checks.
      * Anti whale system that sets fee t
      */
     function preTransfer(
@@ -101,21 +100,30 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         address receiver,
         uint256 amount,
         bool takefee
-    ) external override onlyRole(TOKEN_ROLE) returns (uint256 newTaxFee, uint256 newOtherFee, bool _takFee) {
+    )
+        external
+        override
+        onlyRole(TOKEN_ROLE)
+        returns (
+            uint256 newTaxFee,
+            uint256 newOtherFee,
+            bool _takFee
+        )
+    {
         require(
             hasRole(TOKEN_ROLE, msg.sender),
             "You are not allowed to call this function!"
         );
         newTaxFee = taxFee;
         newOtherFee = otherFee;
-        if(!takefee){
-            return(taxFee, otherFee, takefee);
+        if (!takefee) {
+            return (taxFee, otherFee, takefee);
         }
         //What if there is another pair?
         //Add pair adresses to white list and take max fee for everything else?
         else if (receiver == uniswapV2Pair) {
             (newTaxFee, newOtherFee) = getReleaseFee();
-            if (newTaxFee + newOtherFee <= taxFee + otherFee){
+            if (newTaxFee + newOtherFee <= taxFee + otherFee) {
                 releaseFeeEnabled = false;
             }
             if (block.timestamp >= (_timer_start[sender] + _time_limit)) {
@@ -123,17 +131,24 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
                 _send_amount[sender] = 0;
             }
             //Make check of send amount is bigger than max sell amount to avoid underflow error in next if
-            if((newTaxFee + newOtherFee) < whalefee){
-                if(_send_amount[sender] >= max_sell_amount){
+            if ((newTaxFee + newOtherFee) < whalefee) {
+                if (_send_amount[sender] >= max_sell_amount) {
                     //Calculate new fee amount
-                    (newTaxFee, newOtherFee) = calculateWhaleFee(0, amount, amount);
-                }
-                else if(amount > (max_sell_amount - _send_amount[sender])){
+                    (newTaxFee, newOtherFee) = calculateWhaleFee(
+                        0,
+                        amount,
+                        amount
+                    );
+                } else if (amount > (max_sell_amount - _send_amount[sender])) {
                     //Get amount that is taxed with normal fee and whalefee
-                    uint256 normalFeeAmount = max_sell_amount - _send_amount[sender];
+                    uint256 normalFeeAmount = max_sell_amount -
+                        _send_amount[sender];
                     uint256 whaleFeeAmount = amount - normalFeeAmount;
-                    (newTaxFee, newOtherFee) = calculateWhaleFee(normalFeeAmount, whaleFeeAmount, amount);
-
+                    (newTaxFee, newOtherFee) = calculateWhaleFee(
+                        normalFeeAmount,
+                        whaleFeeAmount,
+                        amount
+                    );
                 }
             }
             _send_amount[sender] = _send_amount[sender] + amount;
@@ -146,36 +161,46 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
      * NormalFee amount can be 0
      * Returns taxFee and otherFee
      */
-    function calculateWhaleFee(uint256 normalFeeAmount, uint256 whaleFeeAmount, uint256 totalAmount) private view returns(uint256 newtaxFee, uint256 newotherFee){
-        require(whaleFeeAmount > 0, 'Whale fee amount must be bigger than 0!');
-        require(totalAmount > 0, 'Total amount must be bigger than 0!');
+    function calculateWhaleFee(
+        uint256 normalFeeAmount,
+        uint256 whaleFeeAmount,
+        uint256 totalAmount
+    ) private view returns (uint256 newtaxFee, uint256 newotherFee) {
+        require(whaleFeeAmount > 0, "Whale fee amount must be bigger than 0!");
+        require(totalAmount > 0, "Total amount must be bigger than 0!");
         //Check if normalFeeAmount is over 0 to avoid errors
-        normalFeeAmount = normalFeeAmount > 0 ? normalFeeAmount * (taxFee + otherFee) / 100 : 0;
-        whaleFeeAmount = whaleFeeAmount * whalefee / 100;
-        uint256 totalFee = (normalFeeAmount + whaleFeeAmount) * 100 / totalAmount;
-        newtaxFee = totalFee * taxFee / totalFee; 
-        newotherFee = totalFee * otherFee / totalFee;
+        normalFeeAmount = normalFeeAmount > 0
+            ? (normalFeeAmount * (taxFee + otherFee)) / 100
+            : 0;
+        whaleFeeAmount = (whaleFeeAmount * whalefee) / 100;
+        uint256 totalFee = ((normalFeeAmount + whaleFeeAmount) * 100) /
+            totalAmount;
+        newtaxFee = (totalFee * taxFee) / totalFee;
+        newotherFee = (totalFee * otherFee) / totalFee;
         return (newtaxFee, newotherFee);
     }
 
-    function getReleaseFee() public view returns(uint256 releaseTaxFee, uint256 releaseOtherFee){
-        if(!releaseFeeEnabled || releaseFeeStartTime == 0){
+    function getReleaseFee()
+        public
+        view
+        returns (uint256 releaseTaxFee, uint256 releaseOtherFee)
+    {
+        if (!releaseFeeEnabled || releaseFeeStartTime == 0) {
             return (taxFee, otherFee);
         }
         uint256 timeSinceStart = block.timestamp - releaseFeeStartTime;
         uint256 reductionFactor = timeSinceStart / releaseFeeReductionTime;
-        if((releaseFeeReduction * reductionFactor) >= releaseFee){
+        if ((releaseFeeReduction * reductionFactor) >= releaseFee) {
             return (taxFee, otherFee);
         }
         uint256 newFee = releaseFee - (reductionFactor * releaseFeeReduction);
-        if(newFee <= (taxFee + otherFee)){
+        if (newFee <= (taxFee + otherFee)) {
             return (taxFee, otherFee);
         }
-        releaseTaxFee = newFee * taxFee / (taxFee + otherFee);
-        releaseOtherFee = newFee * otherFee / (taxFee + otherFee);
+        releaseTaxFee = (newFee * taxFee) / (taxFee + otherFee);
+        releaseOtherFee = (newFee * otherFee) / (taxFee + otherFee);
         return (releaseTaxFee, releaseOtherFee);
     }
-
 
     //Get pair function since interface cant contain a variable
     function getPair() external view override returns (address) {
@@ -191,7 +216,12 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
      * @dev Function is called after tokens are send to trade to bnb and add liquidity
      * Inputs are sender, reciever, amount and if fee is taken. No every variable is used, but can be useful in future modifications
      */
-    function postTransfer(address sender, address reciever, uint256 amount, bool takefee) external override onlyRole(TOKEN_ROLE){
+    function postTransfer(
+        address sender,
+        address reciever,
+        uint256 amount,
+        bool takefee
+    ) external override onlyRole(TOKEN_ROLE) {
         uint256 balance = _token.balanceOf(address(this));
         //Dont sell if collected amount of tokens is very small and dont sell more than a max amount
         if (balance < min_sell_amount) {
@@ -201,21 +231,23 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         if (balance > max_sell_amount) {
             balance = max_sell_amount;
         }
-        
+
         // Get amount of tokens not to swap
-        uint256 liquidityTokenAmount = ((balance * liquidityfee) / otherFee) / 2;
-        uint256 swapamount = balance - liquidityTokenAmount;  
+        uint256 liquidityTokenAmount = ((balance * liquidityfee) / otherFee) /
+            2;
+        uint256 swapamount = balance - liquidityTokenAmount;
 
         uint256 initialBalance = _pairtoken.balanceOf(address(this));
 
         swapTokensForToken(swapamount);
 
-        uint256 newBalance = _pairtoken.balanceOf(address(this))- initialBalance;
+        uint256 newBalance = _pairtoken.balanceOf(address(this)) -
+            initialBalance;
         // how much ETH did we just swap into?
 
         // Find liquidity part of swap
-        uint256 liquidityPairAmount =
-            (newBalance * liquidityfee) / (otherFee * 2);
+        uint256 liquidityPairAmount = (newBalance * liquidityfee) /
+            (otherFee * 2);
 
         //Everything left over just goes to other fees or is included in next swap
         //Anti whale system should reduce this effect
@@ -272,19 +304,28 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         public
         onlyRole(JANITOR_ROLE)
     {
-        require(fee < 49, 'The fee is too high!');
+        require(fee < 49, "The fee is too high!");
         _time_limit = time_min * 1 minutes;
         whalefee = fee;
     }
 
-    function changeMaxSell(uint256 max) public onlyRole(JANITOR_ROLE){
-        require(max > min_sell_amount, "Max amount needs to be bigger than min sell amount");
-        require(max < _pairtoken.totalSupply(), "Max amount needs to be less than total supply");
+    function changeMaxSell(uint256 max) public onlyRole(JANITOR_ROLE) {
+        require(
+            max > min_sell_amount,
+            "Max amount needs to be bigger than min sell amount"
+        );
+        require(
+            max < _pairtoken.totalSupply(),
+            "Max amount needs to be less than total supply"
+        );
         max_sell_amount = max;
     }
 
-    function changeMinSell(uint256 min) public onlyRole(JANITOR_ROLE){
-        require(min < max_sell_amount, "Max amount needs to be bigger than min sell amount");
+    function changeMinSell(uint256 min) public onlyRole(JANITOR_ROLE) {
+        require(
+            min < max_sell_amount,
+            "Max amount needs to be bigger than min sell amount"
+        );
         min_sell_amount = min;
     }
 
@@ -294,7 +335,10 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
     {
         require(receiver != address(0x0), "Withdraw address cant be 0!");
         require(amount > 0, "You need to send more than 0!");
-        require(amount <= _pairtoken.balanceOf(address(this)), 'The contract balance is too low');
+        require(
+            amount <= _pairtoken.balanceOf(address(this)),
+            "The contract balance is too low"
+        );
         _pairtoken.transfer(receiver, amount);
     }
 
@@ -312,7 +356,10 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         uint256 marketing,
         uint256 liquidity
     ) public onlyRole(FEE_ROLE) {
-        require((tax + marketing + liquidity) < 20, 'The normal fee cant be higher than 20%!');
+        require(
+            (tax + marketing + liquidity) < 20,
+            "The normal fee cant be higher than 20%!"
+        );
         taxFee = tax;
         marketingfee = marketing;
         liquidityfee = liquidity;
@@ -320,33 +367,55 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable {
         normalfee = taxFee + otherFee;
     }
 
-    function updateReleaseFee(uint256 fee, uint256 reduction, uint256 reductionTime) public onlyRole(FEE_ROLE){
-        require(releaseFeeStartTime == 0, 'This can only be done before launch!');
-        require(fee <= 45, 'The fee cant be higher than 45%!');
-        require(releaseFee > releaseFeeReduction, 'The reduction cant be higher than the fee!');
-        require(reductionTime < 120 hours, 'The max reduction time pr step is 5 days!');
+    function updateReleaseFee(
+        uint256 fee,
+        uint256 reduction,
+        uint256 reductionTime
+    ) public onlyRole(FEE_ROLE) {
+        require(
+            releaseFeeStartTime == 0,
+            "This can only be done before launch!"
+        );
+        require(fee <= 45, "The fee cant be higher than 45%!");
+        require(
+            releaseFee > releaseFeeReduction,
+            "The reduction cant be higher than the fee!"
+        );
+        require(
+            reductionTime < 120 hours,
+            "The max reduction time pr step is 5 days!"
+        );
         releaseFee = fee;
         releaseFeeReduction = reduction;
         releaseFeeReductionTime = reductionTime;
     }
 
-    function disableReleaseFee() public onlyRole(FEE_ROLE){
+    function disableReleaseFee() public onlyRole(FEE_ROLE) {
         releaseFeeEnabled = false;
     }
 
-    function StartReleaseFee() public onlyRole(FEE_ROLE){
-        require(releaseFeeStartTime == 0, 'You can only do this once');
+    function StartReleaseFee() public onlyRole(FEE_ROLE) {
+        require(releaseFeeStartTime == 0, "You can only do this once");
         releaseFeeEnabled = true;
         releaseFeeStartTime = block.timestamp;
     }
 
     //Withdraw tokens, can be vanurable to reentrancy attacks, but doesn't matter becouse of onlyOwner
-    function emergencyWithdraw(uint256 amount, address token) public onlyRole(JANITOR_ROLE){
-        require(amount > 0, 'You cant withdraw 0');
-        require(token != address(_token), 'You cant withdraw the token manually from this contract!');
+    function emergencyWithdraw(uint256 amount, address token)
+        public
+        onlyRole(JANITOR_ROLE)
+    {
+        require(amount > 0, "You cant withdraw 0");
+        require(
+            token != address(_token),
+            "You cant withdraw the token manually from this contract!"
+        );
         require(token != address(_pairtoken));
         IERC20 tokenobj = IERC20(token);
-        require(amount >= tokenobj.balanceOf(address(this)), 'The contract balance is too low');
+        require(
+            amount >= tokenobj.balanceOf(address(this)),
+            "The contract balance is too low"
+        );
         tokenobj.transfer(msg.sender, amount);
     }
 }
