@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+
 pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
@@ -7,7 +8,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interfaces/uniswapinterface.sol";
 import "./interfaces/proxyinterface.sol";
 
-contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable, ReentrancyGuard {
+contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, ReentrancyGuard {
     bytes32 public constant MARKETING_WITHDRAW_ROLE =
         keccak256("MARKETING_WITHDRAW_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
@@ -80,7 +81,7 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable, R
         );
         address tmpuniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory()).getPair(token_address,pair_token);
         if(tmpuniswapV2Pair == address(0)){
-            address tmpuniswapV2Pair =
+            tmpuniswapV2Pair =
                 IUniswapV2Factory(_uniswapV2Router.factory()).createPair(
                     token_address,
                     pair_token
