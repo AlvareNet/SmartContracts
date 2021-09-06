@@ -5,12 +5,11 @@ pragma solidity 0.8.4;
 //Imports from openzeppelin library
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./interfaces/proxyinterface.sol";
 
-contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
+contract AlvareNET is Context, IERC20, AccessControlEnumerable {
 
     //using safe math to not rewrite even though its not needed anymore
     using SafeMath for uint256;
@@ -18,7 +17,6 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
     using Address for address;
 
     //Create roles for the contract
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant TOCENOMICS_ROLE = keccak256("TOCENOMICS_ROLE");
     bytes32 public constant JANITOR_ROLE = keccak256("JANITOR_ROLE");
     bytes32 public constant POOL_ROLE = keccak256("POOL_ROLE");
@@ -75,7 +73,6 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
         _rOwned[_msgSender()] = _rTotal;
         //Give contract creator all roles defined in contract
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _setupRole(PAUSER_ROLE, _msgSender());
         _setupRole(TOCENOMICS_ROLE, _msgSender());
         _setupRole(JANITOR_ROLE, _msgSender());
         //
@@ -397,32 +394,6 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
     }
 
     /**
-     * @dev Pauses all token transfers.
-     *
-     * See {ERC20Pausable} and {Pausable-_pause}.
-     *
-     * Requirements:
-     *
-     * - the caller must have the `PAUSER_ROLE`.
-     */
-    function pause() public onlyRole(PAUSER_ROLE) virtual {
-        _pause();
-    }
-
-    /**
-     * @dev Unpauses all token transfers.
-     *
-     * See {ERC20Pausable} and {Pausable-_unpause}.
-     *
-     * Requirements:
-     *
-     * - the caller must have the `PAUSER_ROLE`.
-     */
-    function unpause() public onlyRole(PAUSER_ROLE) virtual {
-        _unpause();
-    }
-
-    /**
      * @dev Check if address is excluded from transfer fees
      *
      */
@@ -650,11 +621,6 @@ contract AlvareNET is Context, IERC20, Pausable, AccessControlEnumerable {
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
-
-        //Check if contract is paused, only specific
-        if (!hasRole(DEFAULT_ADMIN_ROLE, from)) {
-            require(!paused(), "ERC20Pausable: token transfer while paused");
-        }
 
         if(_inTransfer){
             _tokenTransfer(from, to, amount, false);
