@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+
 pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
@@ -7,7 +8,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interfaces/uniswapinterface.sol";
 import "./interfaces/proxyinterface.sol";
 
-contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable, ReentrancyGuard {
+contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, ReentrancyGuard {
     bytes32 public constant MARKETING_WITHDRAW_ROLE =
         keccak256("MARKETING_WITHDRAW_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
@@ -62,12 +63,10 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable, R
     constructor(
         address token_address,
         address uniswap_router,
-        address uniswap_pair,
         address pair_token
     ) {
         require(token_address != address(0x0));
         require(uniswap_router != address(0x0));
-        require(uniswap_pair != address(0x0));
         require(pair_token != address(0x0));
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setupRole(MARKETING_WITHDRAW_ROLE, _msgSender());
@@ -80,16 +79,20 @@ contract ProxyFunctionsV2 is Context, IProxyContract, AccessControlEnumerable, R
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(
             uniswap_router
         );
+        address tmpuniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory()).getPair(token_address,pair_token);
+        if(tmpuniswapV2Pair == address(0)){
+            tmpuniswapV2Pair =
+                IUniswapV2Factory(_uniswapV2Router.factory()).createPair(
+                    token_address,
+                    pair_token
+                );
+        }
         //Create a uniswap pair for this new token
-        // address tmpuniswapV2Pair =
-        //     IUniswapV2Factory(_uniswapV2Router.factory()).createPair(
-        //         tokenaddress,
-        //         _uniswapV2Router.WETH()
-        //     );
+
         // set the rest of the contract variables
         uniswapV2Router = _uniswapV2Router;
-        _uniswapV2Pair = IUniswapV2Pair(uniswap_pair);
-        uniswapV2Pair = uniswap_pair;
+        _uniswapV2Pair = IUniswapV2Pair(tmpuniswapV2Pair);
+        uniswapV2Pair = tmpuniswapV2Pair;
     }
 
     /**
