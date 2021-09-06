@@ -3,5 +3,6 @@ node_modules
 #Hardhat files
 cache
 artifacts
-scripts/sheet_secret.json
-test.json
+
+typechain
+secret.json
