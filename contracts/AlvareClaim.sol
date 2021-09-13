@@ -30,7 +30,7 @@ contract MerkleDistributor is IMerkleDistributor {
         _claimedAddress[account] = true;
     }
 
-    function getBalance(uint256 startAmount) public view returns (uint256) {
+    function getBalance(uint256 startAmount) public view override returns (uint256) {
         uint256 newTokenBalance = _AlvareNet.tokenFromReflection(_startReflection);
         return startAmount * newTokenBalance / _startToken;
     }
