@@ -8,9 +8,12 @@ const config: HardhatUserConfig = {
   defaultNetwork: "testnet",
   networks: {
     localhost: {
-      url: "http://127.0.0.1:8545"
+      url: "http://127.0.0.1:8545",
     },
     hardhat: {
+      forking: {
+        url: "https://speedy-nodes-nyc.moralis.io/811503707c61a97215f6e251/bsc/mainnet/archive",
+      }
     },
     testnet: {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545",
