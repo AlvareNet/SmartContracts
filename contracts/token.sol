@@ -508,16 +508,6 @@ contract AlvareNet is Context, IERC20, AccessControlEnumerable {
     /**
      * @dev Internal function to calculate current supply based on token amounts and reflected amounts for not excluded adresses
      *
-     * TODO fix array?
-     * (Original function)
-     *  for (uint256 i = 0; i < _excluded.length; i++) {
-     *       if (
-     *           _rOwned[_excluded[i]] > rSupply ||
-     *           _tOwned[_excluded[i]] > tSupply
-     *       ) return (_rTotal, _tTotal);
-     *       rSupply = rSupply.sub(_rOwned[_excluded[i]]);
-     *       tSupply = tSupply.sub(_tOwned[_excluded[i]]);
-     *   }
      */
     function _getCurrentSupply() private view returns (uint256, uint256) {
         uint256 rSupply = _rTotal;
@@ -610,7 +600,6 @@ contract AlvareNet is Context, IERC20, AccessControlEnumerable {
      *
      *  Check if requires are satisfied and check if sender or recipient is excluded from the fee.
      *  Avoid sending too much during one transaction for whales
-     *  Todo should fee check be done in proxy???
      *
      */
     function _transfer(
@@ -656,12 +645,12 @@ contract AlvareNet is Context, IERC20, AccessControlEnumerable {
             _tokenTransfer(from, to, amount, takeFee);
 
             if(proxyenabled){
-                IProxyContract(proxycontract).postTransfer(from, to, amount, takeFee);
                 //Reverse fee to old state
                 if(proxyfee){
                     taxFee = contractTax;
                     otherFee = contractOther;
                 }
+                IProxyContract(proxycontract).postTransfer(from, to, amount, takeFee);
             }
             _inTransfer = false;
         }
