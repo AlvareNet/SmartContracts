@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./interfaces/proxyinterface.sol";
 
-contract AlvareNET is Context, IERC20, AccessControlEnumerable {
+contract AlvareNet is Context, IERC20, AccessControlEnumerable {
 
     //using safe math to not rewrite even though its not needed anymore
     using SafeMath for uint256;
@@ -54,7 +54,7 @@ contract AlvareNET is Context, IERC20, AccessControlEnumerable {
     uint256 public otherFee = 7;
     uint256 private _previousOtherFee = otherFee;
 
-    uint256 public constant maxFeeTotal = 40;
+    uint256 public constant maxFeeTotal = 20;
 
     address public proxycontract;
 
@@ -378,7 +378,7 @@ contract AlvareNET is Context, IERC20, AccessControlEnumerable {
      *
      */
     function setTaxFeePercent(uint256 fee) public onlyRole(TOCENOMICS_ROLE) {
-        require(maxFeeTotal.div(2) <= 20, "The fee cant be higher than 20%");
+        require(fee.add(otherFee) <= maxFeeTotal, "The total fee cant be higher than 20%");
         taxFee = fee;
     }
 
@@ -389,7 +389,7 @@ contract AlvareNET is Context, IERC20, AccessControlEnumerable {
      *
      */
     function setOtherFeeFeePercent(uint256 fee) public onlyRole(TOCENOMICS_ROLE) {
-        require(maxFeeTotal.div(2) <= 20, "The fee cant be higher than 20%");
+        require(fee.add(taxFee) <= maxFeeTotal, "The total fee cant be higher than 20%");
         otherFee = fee;
     }
 
