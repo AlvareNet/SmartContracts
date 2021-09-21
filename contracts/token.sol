@@ -44,7 +44,7 @@ contract AlvareNet is Context, IERC20, AccessControlEnumerable {
     bool public proxyenabled = false;
 
     //Define initial contract settings
-    string private constant _name = "AlvareNET";
+    string private constant _name = "AlvareNet";
     string private constant _symbol = "ALVN";
     uint8 private constant _decimals = 9;
 
