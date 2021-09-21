@@ -22,7 +22,7 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
 
     //Modifiable values
     //Tokenomics
-    uint256 public min_sell_amount = 1000000000000 * 10**9;
+    uint256 public min_sell_amount = 100000000000 * 10**9;
     uint256 public max_sell_amount = 10000000000000 * 10**9;
 
     //Fees to send to token

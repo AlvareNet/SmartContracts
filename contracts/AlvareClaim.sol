@@ -7,7 +7,7 @@ import "./interfaces/IMerkleDistributor.sol";
 
 contract MerkleDistributor is IMerkleDistributor {
     address public immutable override token;
-    AlvareNET private immutable _AlvareNet;
+    AlvareNet private immutable _AlvareNet;
     bytes32 public immutable override merkleRoot;
     uint256 private immutable _startReflection;
     uint256 private constant _startToken = 1000000000;
@@ -17,8 +17,8 @@ contract MerkleDistributor is IMerkleDistributor {
 
     constructor(address token_, bytes32 merkleRoot_) {
         token = token_;
-        _AlvareNet = AlvareNET(token_);
-        _startReflection = AlvareNET(token_).reflectionFromToken(_startToken, false);
+        _AlvareNet = AlvareNet(token_);
+        _startReflection = AlvareNet(token_).reflectionFromToken(_startToken, false);
         merkleRoot = merkleRoot_;
     }
 
