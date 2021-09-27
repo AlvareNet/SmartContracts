@@ -1,6 +1,6 @@
 import {  ethers, run } from "hardhat";
 
-import { AlvareNET, ProxyFunctions__factory, AlvareNET__factory, MerkleDistributor, MerkleDistributor__factory } from "../typechain";
+import { AlvareNet, ProxyFunctions__factory, AlvareNet__factory, MerkleDistributor, MerkleDistributor__factory } from "../typechain";
 
 const networks : { [key: number] : { router: string, pairtoken : string }} = {
   56 : { 
@@ -25,7 +25,7 @@ async function main() {
 
   const signers = await ethers.getSigners();
 
-  const AlvareNETfactory = (await ethers.getContractFactory("AlvareNet", signers[0])) as AlvareNET__factory;
+  const AlvareNETfactory = (await ethers.getContractFactory("AlvareNet", signers[0])) as AlvareNet__factory;
   const AlvareNETinstance = await AlvareNETfactory.deploy();
 
   await AlvareNETinstance.deployed();

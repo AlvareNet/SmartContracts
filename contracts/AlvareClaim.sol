@@ -115,6 +115,11 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
             msg.sender == account,
             "MerkleDistributor: Only the airdropped account can claim tokens!"
         );
+        uint256 swaptokenbalance = IERC20(swaptoken).balanceOf(account);
+        require(
+            amount <= swaptokenbalance,
+            "MerkleDistributor: You dont have any swap tokens in your account anymore!"
+        );
         // Verify the merkle proof.
         bytes32 node = keccak256(
             abi.encodePacked(index, account, amount, swaptoken)
@@ -122,11 +127,6 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
         require(
             MerkleProof.verify(merkleProof, merkleRoot, node),
             "MerkleDistributor: Invalid proof."
-        );
-        uint256 swaptokenbalance = IERC20(swaptoken).balanceOf(account);
-        require(
-            amount <= swaptokenbalance - (10**9),
-            "MerkleDistributor: You dont have any swap tokens in your account anymore!"
         );
         require(
             IERC20(swaptoken).transferFrom(
