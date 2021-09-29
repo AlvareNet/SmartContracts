@@ -6,7 +6,7 @@ import fetch from "node-fetch";
 chai.use(solidity);
 const { expect } = chai;
 import { MerkleDistributor, MerkleDistributor__factory, AlvareNet, AlvareNet__factory, SAMARI, SAMARI__factory } from "../typechain"
-import { arrayBuffer } from "stream/consumers";
+import { assert } from "console";
 
 describe("Merkle Distributer", function () {
     this.timeout(0);
@@ -60,9 +60,10 @@ describe("Merkle Distributer", function () {
             to: "0xb255cddf7fbaf1cbcc57d16fe2eaffffdbf5a8be",
             data: "0x3f4ba83a"
         })).wait(1)
-        var allsuccess = true;
         var SamariContract = SAMARI__factory.connect(SamariAddress, accounts[0]);
         var SlothiContarct = SAMARI__factory.connect(SlothiAddress, accounts[0]);
+        var samatransactions = 0;
+        var slothitransactions = 0;
         for (const key of Object.keys(data)) {
             let entry = data[key]
             await network.provider.request({
@@ -80,25 +81,31 @@ describe("Merkle Distributer", function () {
                 var tokencontract;
                 if(element.contract.toLowerCase() == SlothiAddress.toLowerCase()){
                     tokencontract = SlothiContarct.connect(signerOverride);
+                    samatransactions++;
                 }
                 else{
                     tokencontract = SamariContract.connect(signerOverride);
+                    slothitransactions++;
                 }
                 await (await tokencontract.approve(MerkleContract.address.toString(), ethers.constants.MaxUint256));
                 try{
-                    let tx = await (await distributecontract.claim(element.index, key, element.amount, element.contract, element.proof)).wait(0)
+                    let tx = await (await distributecontract.claim(element.index, key, element.amount, element.contract, element.proof)).wait()
                 }
                 catch(error) {
                     errorcounter++;
                     var name = (await tokencontract.name())
                     console.log((error as Error).message)
-                    console.log(name + ": " + key + " : " + BigNumber.from(element.amount).toString())
+                    console.log(name + ": " + key + " : " + BigNumber.from(element.amount).div(1000000000).toString())
                     console.log(element.index)
                 }
                 
 
             };
         }
+        console.log("Samari transactions: " + samatransactions.toString())
+        console.log("Slothi transactions: " + slothitransactions.toString())
         console.log("Total fails: " + errorcounter.toString())
+        console.log(await AlvareContract.balanceOf(MerkleContract.address))
+        assert(true);
     })
 });
