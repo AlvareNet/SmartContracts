@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
@@ -12,6 +12,7 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
     bytes32 public immutable override merkleRoot;
     uint256 private immutable _startReflection;
     uint256 private constant _startToken = 1000000000;
+    bool public enabled = false;
     address public Samari;
     address public Slothi;
     uint256 public SamariMultiplier;
@@ -87,6 +88,11 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
         return balance;
     }
 
+    function enable(bool _enable) public onlyOwner{
+        require(_enable != enabled, 'MerkleDistributor: contract already in set state!');
+        enabled = _enable;
+    }
+
     function claim(
         uint256 index,
         address account,
@@ -94,6 +100,7 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
         address swaptoken,
         bytes32[] calldata merkleProof
     ) external override {
+        require(enabled, 'MerkleDistributor: Distributor is not enabled!');
         uint256 claimamount = amount;
         if (swaptoken == Samari) {
             require(
@@ -154,6 +161,14 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
         IERC20(swaptoken).transfer(
             msg.sender,
             IERC20(swaptoken).balanceOf(address(this))
+        );
+    }
+
+    function WithDrawLeftOvers() public onlyOwner{
+        require(!enabled, 'Leftover tokens cant be withdrawn while distributor is still active!');
+        IERC20(token).transfer(
+            msg.sender,
+            IERC20(token).balanceOf(address(this))
         );
     }
 }
