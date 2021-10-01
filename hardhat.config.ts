@@ -1,11 +1,12 @@
-import '@nomiclabs/hardhat-waffle'
 import '@typechain/hardhat'
+import '@nomiclabs/hardhat-ethers'
+import '@nomiclabs/hardhat-waffle'
 import "@nomiclabs/hardhat-etherscan";
 import { HardhatUserConfig } from 'hardhat/types'
 const { mnemonic, bscscan } = require('./secrets.json');
 
 const config: HardhatUserConfig = {
-  defaultNetwork: "testnet",
+  defaultNetwork: "hardhat",
   networks: {
     localhost: {
       url: "http://127.0.0.1:8545",
@@ -13,6 +14,7 @@ const config: HardhatUserConfig = {
     hardhat: {
       forking: {
         url: "https://speedy-nodes-nyc.moralis.io/811503707c61a97215f6e251/bsc/mainnet/archive",
+        blockNumber: 11257032
       }
     },
     testnet: {

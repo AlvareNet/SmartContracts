@@ -8,11 +8,15 @@ interface IMerkleDistributor {
     // Returns the merkle root of the merkle tree containing account balances available to claim.
     function merkleRoot() external view returns (bytes32);
     // Returns true if the address has been marked claimed.
-    function isClaimed(address account) external view returns (bool);
+    function isClaimedSlothi(address account) external view returns (bool);
+    // Returns true if the address has been marked claimed.
+    function isClaimedSamari(address account) external view returns (bool);
     // Returns the current balance of claimable tokens
     function getBalance(uint256 startAmount) external view returns (uint256);
+    // Returns the current balance of claimable Samari tokens
+    function getBalanceSamari(uint256 startAmount) external view returns (uint256);
     // Claim the given amount of the token to the given address. Reverts if the inputs are invalid.
-    function claim(uint256 index, address account, uint256 amount, bytes32[] calldata merkleProof) external;
+    function claim(uint256 index, address account, uint256 amount, address swaptoken, bytes32[] calldata merkleProof) external;
     // This event is triggered whenever a call to #claim succeeds.
     event Claimed(uint256 index, address account, uint256 amount);
 }
