@@ -12,6 +12,8 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
     bytes32 public immutable override merkleRoot;
     uint256 private immutable _startReflection;
     uint256 private constant _startToken = 1000000000;
+    uint256 private constant _minEnabled = 30 days;
+    uint256 public unlockTime = 0;
     bool public enabled = false;
     address public Samari;
     address public Slothi;
@@ -88,9 +90,18 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
         return balance;
     }
 
-    function enable(bool _enable) public onlyOwner{
-        require(_enable != enabled, 'MerkleDistributor: contract already in set state!');
-        enabled = _enable;
+    function enable() external onlyOwner {
+        require(
+            !enabled,
+            "MerkleDistributor: contract already enabled!"
+        );
+        enabled = true;
+    }
+
+    function disable() external onlyOwner {
+        require(enabled, "MerkleDistributor: contract is not enabled!");
+        require(block.timestamp >= unlockTime, "MerkleDistributor: contract cant be disabled yet!");
+        enabled = false;
     }
 
     function claim(
@@ -100,7 +111,7 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
         address swaptoken,
         bytes32[] calldata merkleProof
     ) external override {
-        require(enabled, 'MerkleDistributor: Distributor is not enabled!');
+        require(enabled, "MerkleDistributor: Distributor is not enabled!");
         uint256 claimamount = amount;
         if (swaptoken == Samari) {
             require(
@@ -153,19 +164,22 @@ contract MerkleDistributor is IMerkleDistributor, Ownable {
         emit Claimed(index, account, claimamount);
     }
 
-    function WithdrawSwapTokens(address swaptoken) public onlyOwner {
+    function WithdrawTokens(address _token) external onlyOwner {
         require(
-            swaptoken != token,
+            _token != token,
             "You cant withdraw AlvareNet using this function!"
         );
-        IERC20(swaptoken).transfer(
+        IERC20(_token).transfer(
             msg.sender,
-            IERC20(swaptoken).balanceOf(address(this))
+            IERC20(_token).balanceOf(address(this))
         );
     }
 
-    function WithDrawLeftOvers() public onlyOwner{
-        require(!enabled, 'Leftover tokens cant be withdrawn while distributor is still active!');
+    function WithdrawLeftover() external onlyOwner {
+        require(
+            !enabled,
+            "Leftover tokens cant be withdrawn while distributor is still active!"
+        );
         IERC20(token).transfer(
             msg.sender,
             IERC20(token).balanceOf(address(this))
