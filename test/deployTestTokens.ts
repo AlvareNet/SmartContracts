@@ -44,13 +44,42 @@ describe("Merkle Distributer", function () {
         MerkleContract = await MerkleFactory.deploy(AlvareContract.address.toString(), settings.merkleroot, SlothiAddress, SamariAddress, 70)
         expect(await MerkleContract.getBalance(10)).to.equal(BigNumber.from(10))
     })
+    it("Test Reflection" , async function () {
+
+        try {
+            var snapshot = await network.provider.request({
+                method: "evm_snapshot",
+                params: [],
+              });
+            await (await AlvareContract.setOtherFeeFeePercent(0)).wait(1);
+            await (await AlvareContract.setTaxFeePercent(20)).wait(1);
+            await (await AlvareContract.transfer(await accounts[1].getAddress(), 1000000)).wait(1);
+            await (await AlvareContract.excludeFromReward(await accounts[0].getAddress())).wait(1);
+            await (await AlvareContract.includeInFee(await accounts[0].getAddress())).wait(1);
+            await (await AlvareContract.transfer(await accounts[2].getAddress(), 1000000)).wait(1);
+            await (await AlvareContract.transfer(await accounts[2].getAddress(), 12341251234)).wait(1);
+            const merklebalance = await MerkleContract.getBalance(1000000);
+            const realbalance = await AlvareContract.balanceOf(await accounts[1].getAddress());
+            await network.provider.request({
+                method: "evm_revert",
+                params: [snapshot],
+              });
+            expect(merklebalance).to.equal(realbalance);
+        } catch (error) {
+            console.log(error);
+        }
+        
+
+    })
     it("Send to Merkle Contract", async function () {
         var total = BigNumber.from(settings.slthtotal).add((BigNumber.from(settings.samatotal).mul(70)))
-        await (await AlvareContract.transfer(MerkleContract.address.toString(), total)).wait(1)
+        await (await AlvareContract.transfer(MerkleContract.address.toString(), total)).wait(1);
         expect(await AlvareContract.balanceOf(MerkleContract.address.toString())).to.equal(total)
     })
+
     it("Checking entries ", async function () {
         var errorcounter = 0;
+        await (await MerkleContract.enable()).wait(1);
         await network.provider.request({
             method: "hardhat_impersonateAccount",
             params: ["0x1F79B8aef7854D86e2cC89Ada44CB95a33cd72Cf"],
@@ -77,7 +106,9 @@ describe("Merkle Distributer", function () {
             var signerOverride = await ethers.provider.getSigner(ethers.utils.getAddress(key))
             var tokencontract
             var distributecontract = MerkleContract.connect(signerOverride)
+            var counter = 0;
             for (const element of entry) {
+                counter++;
                 var tokencontract;
                 if(element.contract.toLowerCase() == SlothiAddress.toLowerCase()){
                     tokencontract = SlothiContarct.connect(signerOverride);
@@ -99,7 +130,9 @@ describe("Merkle Distributer", function () {
                     console.log(element.index)
                 }
                 
-
+                if(counter > 100){
+                    break;
+                }
             };
         }
         console.log("Samari transactions: " + samatransactions.toString())
