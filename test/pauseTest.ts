@@ -89,9 +89,22 @@ describe("Testing Pause function", function(){
         catch(error){
             console.log(error)
             fail3 = true;
+            console.log("Failed in 3rd send")
+        }
+        var fail4 = false;
+        try{
+            await ProxyInstance.pause()
+            await ProxyInstance.grantRole(await ProxyInstance.PAUSE_ROLE(), await accounts[3].getAddress())
+            var tmpAlvareNet = AlvareNet__factory.connect(AlvareNETinstance.address, accounts[3])
+            tx = await tmpAlvareNet.transfer(await accounts[2].getAddress(), 5000);
+            await tx.wait(1)
+        }
+        catch(error){
+            console.log(error)
+            fail4 = true;
             console.log("Failed in last send")
         }
 
-        expect(!fail1 && !fail2 && !fail3);
+        expect(!fail1 && !fail2 && !fail3 && !fail4);
     })
 })
