@@ -17,6 +17,8 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
 
     bytes32 public constant FEE_ROLE = keccak256("FEE_ROLE");
 
+    bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
+
     mapping(address => uint256) public send_amount;
     mapping(address => uint256) public timer_start;
 
@@ -39,6 +41,8 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
     uint256 public normalfee = taxFee + otherFee;
     uint256 public whalefee = 40;
 
+    //Pause function for release
+    bool public paused = false;
     //Sell fee on release
     uint256 public releaseFee = 40;
     bool public releaseFeeEnabled = false;
@@ -72,6 +76,7 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
         _setupRole(MARKETING_WITHDRAW_ROLE, _msgSender());
         _setupRole(JANITOR_ROLE, _msgSender());
         _setupRole(FEE_ROLE, _msgSender());
+        _setupRole(PAUSE_ROLE, _msgSender());
         _setupRole(TOKEN_ROLE, token_address);
         _uniswapRouter = uniswap_router;
         _token = IERC20(token_address);
@@ -114,6 +119,10 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
             bool _takFee
         )
     {
+        if(paused){
+            require(hasRole(PAUSE_ROLE, sender), "The token is paused!");
+        }
+
         require(
             hasRole(TOKEN_ROLE, msg.sender),
             "You are not allowed to call this function!"
@@ -158,6 +167,14 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
             send_amount[sender] = send_amount[sender] + amount;
         }
         return (newTaxFee, newOtherFee, takefee);
+    }
+
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        paused = true;
+    }
+
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        paused = false;
     }
 
     /**
