@@ -27,24 +27,26 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
     uint256 public min_sell_amount = 100000000000 * 10**9;
     uint256 public max_sell_amount = 10000000000000 * 10**9;
 
+
+    //Other fee distribution
+    uint256 public liquidityfee = 4;
+    uint256 public marketingfee = 3;
+
+
     //Fees to send to token
     //Fee going to holders
     uint256 public taxFee = 4;
     //Fee going to this contract
     uint256 public otherFee = liquidityfee + marketingfee;
 
-    //Other fee distribution
-    uint256 public liquidityfee = 4;
-    uint256 public marketingfee = 3;
-
     //Total fee amounts for normal fee and whale fee
     uint256 public normalfee = taxFee + otherFee;
-    uint256 public whalefee = 40;
+    uint256 public whalefee = 31;
 
     //Pause function for release
     bool public paused = false;
     //Sell fee on release
-    uint256 public releaseFee = 40;
+    uint256 public releaseFee = 31;
     bool public releaseFeeEnabled = false;
     uint256 public releaseFeeStartTime = 0;
     uint256 public releaseFeeReduction = 5;
@@ -304,7 +306,7 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
             address(_token),
             address(_pairtoken),
             tokenAmount,
-            0,
+            pairAmount,
             0, // slippage is unavoidable
             0, // slippage is unavoidable
             address(this),
@@ -415,10 +417,11 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
         releaseFeeEnabled = false;
     }
 
-    function StartReleaseFee() public onlyRole(FEE_ROLE) {
+    function StartReleaseFee(uint256 starttime) public onlyRole(FEE_ROLE) {
+        require(starttime <= block.timestamp, "You cant set the starttime for the future!");
         require(releaseFeeStartTime == 0, "You can only do this once");
         releaseFeeEnabled = true;
-        releaseFeeStartTime = block.timestamp;
+        releaseFeeStartTime = starttime;
     }
 
     //Withdraw tokens, can be vanurable to reentrancy attacks, but doesn't matter becouse of onlyOwner
