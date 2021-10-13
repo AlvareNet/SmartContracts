@@ -38,7 +38,7 @@ async function main() {
     var proxyFactory = new ProxyFunctions__factory(signers[0])
     var ProxyInstance = await proxyFactory.deploy(AlvareAddress, "0x10ED43C718714eb63d5aA57B78B54704E256024E", "0xe9e7cea3dedca5984780bafc599bd69add087d56")
     await ProxyInstance.deployed()
-    var startTime = 1634050029-57600;
+    var startTime = 1633989600;
     await (await ProxyInstance.StartReleaseFee(startTime)).wait(5)
     if (chainId == 56 || chainId == 97) {
       console.log("Verifying contracts")

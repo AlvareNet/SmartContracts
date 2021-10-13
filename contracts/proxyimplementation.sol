@@ -49,8 +49,10 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
     uint256 public releaseFee = 31;
     bool public releaseFeeEnabled = false;
     uint256 public releaseFeeStartTime = 0;
-    uint256 public releaseFeeReduction = 5;
+    uint256 public releaseFeeReduction = 3;
     uint256 public releaseFeeReductionTime = 24 hours;
+
+    bool public swapandliqifyEnabled = false;
 
     //Anti whale
     uint256 public time_limit = 12 hours;
@@ -137,6 +139,7 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
         //What if there is another pair?
         //Add pair adresses to white list and take max fee for everything else?
         else if (receiver == uniswapV2Pair) {
+            trySwapAndLiquify();
             (newTaxFee, newOtherFee) = getReleaseFee();
             if (newTaxFee + newOtherFee <= taxFee + otherFee) {
                 releaseFeeEnabled = false;
@@ -236,6 +239,20 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
     receive() external payable {}
 
     /**
+    * @dev Enable automatic swapping and liquify.
+    */
+    function enableSwapAndLiquify() public onlyRole(JANITOR_ROLE){
+        swapandliqifyEnabled = true;
+    }
+
+    /**
+    * @dev Disable automatic swapping and liquify.
+    */
+    function disableSwapAndLiquify() public onlyRole(JANITOR_ROLE){
+        swapandliqifyEnabled = false;
+    }
+
+    /**
      * @dev Function is called after tokens are send to trade to bnb and add liquidity
      * Inputs are sender, reciever, amount and if fee is taken. No every variable is used, but can be useful in future modifications
      */
@@ -245,6 +262,14 @@ contract ProxyFunctions is Context, IProxyContract, AccessControlEnumerable, Ree
         uint256 amount,
         bool takefee
     ) external override onlyRole(TOKEN_ROLE) nonReentrant() {
+
+    }
+
+    function trySwapAndLiquify() private {
+
+        if(!swapandliqifyEnabled){
+            return;
+        }
         uint256 balance = _token.balanceOf(address(this));
         //Dont sell if collected amount of tokens is very small and dont sell more than a max amount
         if (balance < min_sell_amount) {
