@@ -8,7 +8,7 @@ const { expect } = chai;
 import { MerkleDistributor, MerkleDistributor__factory, AlvareNet, AlvareNet__factory, SAMARI, SAMARI__factory } from "../typechain"
 import { assert } from "console";
 
-describe("Merkle Distributer", function () {
+/* describe("Merkle Distributer", function () {
     this.timeout(0);
     let accounts: Signer[];
     const provider = new ethers.providers.JsonRpcProvider()
@@ -141,4 +141,4 @@ describe("Merkle Distributer", function () {
         console.log(await AlvareContract.balanceOf(MerkleContract.address))
         assert(true);
     })
-});
+}); */

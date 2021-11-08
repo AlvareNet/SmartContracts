@@ -14,8 +14,9 @@ const config: HardhatUserConfig = {
     hardhat: {
       forking: {
         url: "https://speedy-nodes-nyc.moralis.io/811503707c61a97215f6e251/bsc/mainnet/archive",
-        blockNumber: 11719254
-      }
+        blockNumber: 12477911,
+      },
+      accounts: {mnemonic: mnemonic}
     },
     testnet: {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545",
@@ -26,7 +27,7 @@ const config: HardhatUserConfig = {
     mainnet: {
       url: "https://bsc-dataseed.binance.org/",
       chainId: 56,
-      gasPrice: 10000000000,
+      gasPrice: 5000000000,
       accounts: {mnemonic: mnemonic}
     }
   },

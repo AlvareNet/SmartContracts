@@ -54,6 +54,10 @@ contract MarketingDistributor is AccessControlEnumerable, ReentrancyGuard {
         _setFeeCurrency(_Fee_Currency);
 
         _calculateTotalFee();
+
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        
+        _setupRole(WITHDRAWER_ROLE, _msgSender());
     }
 
 
@@ -168,7 +172,9 @@ contract MarketingDistributor is AccessControlEnumerable, ReentrancyGuard {
         token.safeTransfer(_reciever, balance);
     }
 
-    function WithdrawBNB(address payable _reciever) public {
+    function WithdrawBNB(address payable _reciever) public 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
         uint256 balance = address(this).balance;
         require(balance > 0, "You cant withdraw 0");
         _reciever.transfer(address(this).balance);
